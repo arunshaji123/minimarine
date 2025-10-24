@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vessel Creation Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a8b; }
+        #results { margin-top: 20px; }
+        .vessel-item { padding: 10px; margin: 5px 0; background: #f8f9fa; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Vessel Creation & Collection Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Test Vessel Creation</h3>
+        <button onclick="createTestVessel()">Create Test Vessel</button>
+        <div id="creation-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Test Vessel Collection</h3>
+        <button onclick="loadVessels()">Load All Vessels</button>
+        <div id="collection-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Test with Authentication</h3>
+        <p>For this test, you need to be logged in. Go to <a href="http://localhost:3000/login" target="_blank">http://localhost:3000/login</a> and sign in, then come back here.</p>
+        <button onclick="testWithAuth()">Test with Current Auth</button>
+        <div id="auth-result"></div>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const logDiv = document.createElement('div');
+            logDiv.className = `test-section ${type}`;
+            logDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(logDiv);
+            console.log(`[TEST] ${message}`);
+        }
+
+        async function createTestVessel() {
+            const testVessel = {
+                name: 'Test Vessel ' + Date.now(),
+                imo: 'IMO ' + Math.floor(Math.random() * 9000000 + 1000000),
+                vesselType: 'Container Ship',
+                flag: 'Panama',
+                yearBuilt: 2020,
+                grossTonnage: 50000
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/api/vessels', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'test-token')
+                    },
+                    body: JSON.stringify(testVessel)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('creation-result').innerHTML = 
+                        `<div class="success">✅ Vessel created successfully: ${data.name} (${data.imo})</div>`;
+                    log(`Vessel created: ${data.name}`, 'success');
+                } else {
+                    document.getElementById('creation-result').innerHTML = 
+                        `<div class="error">❌ Vessel creation failed: ${data.msg || data.message || 'Unknown error'}</div>`;
+                    log(`Vessel creation failed: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('creation-result').innerHTML = 
+                    `<div class="error">❌ Request failed: ${error.message}</div>`;
+                log(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadVessels() {
+            try {
+                const response = await fetch('http://localhost:5000/api/vessels', {
+                    headers: {
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'test-token')
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const container = document.getElementById('collection-result');
+                    container.innerHTML = `<div class="success">✅ Found ${data.length} vessels:</div>`;
+                    
+                    data.forEach(vessel => {
+                        const vesselDiv = document.createElement('div');
+                        vesselDiv.className = 'vessel-item';
+                        vesselDiv.innerHTML = `
+                            <strong>${vessel.name}</strong> (${vessel.imo})<br>
+                            Type: ${vessel.vesselType} | Flag: ${vessel.flag}<br>
+                            Year: ${vessel.yearBuilt} | Tonnage: ${vessel.grossTonnage?.toLocaleString()}
+                        `;
+                        container.appendChild(vesselDiv);
+                    });
+                    
+                    log(`Loaded ${data.length} vessels`, 'success');
+                } else {
+                    document.getElementById('collection-result').innerHTML = 
+                        `<div class="error">❌ Failed to load vessels: ${data.msg || data.message || 'Unknown error'}</div>`;
+                    log(`Failed to load vessels: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('collection-result').innerHTML = 
+                    `<div class="error">❌ Request failed: ${error.message}</div>`;
+                log(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWithAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                document.getElementById('auth-result').innerHTML = 
+                    `<div class="error">❌ No authentication token found. Please log in first.</div>`;
+                return;
+            }
+
+            try {
+                // Test vessel creation with auth
+                const testVessel = {
+                    name: 'Auth Test Vessel ' + Date.now(),
+                    imo: 'IMO ' + Math.floor(Math.random() * 9000000 + 1000000),
+                    vesselType: 'Tanker',
+                    flag: 'Liberia',
+                    yearBuilt: 2019,
+                    grossTonnage: 75000
+                };
+
+                const response = await fetch('http://localhost:5000/api/vessels', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(testVessel)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('auth-result').innerHTML = 
+                        `<div class="success">✅ Authenticated vessel creation successful: ${data.name}</div>`;
+                    log(`Authenticated vessel created: ${data.name}`, 'success');
+                } else {
+                    document.getElementById('auth-result').innerHTML = 
+                        `<div class="error">❌ Authenticated vessel creation failed: ${data.msg || data.message}</div>`;
+                    log(`Authenticated vessel creation failed: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('auth-result').innerHTML = 
+                    `<div class="error">❌ Authenticated request failed: ${error.message}</div>`;
+                log(`Authenticated request failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-load vessels on page load
+        window.addEventListener('load', function() {
+            log('Vessel test page loaded', 'info');
+            loadVessels();
+        });
+    </script>
+</body>
+</html>
+
+
+

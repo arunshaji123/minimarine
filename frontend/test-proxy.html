@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Proxy</title>
+</head>
+<body>
+    <h1>Test Proxy</h1>
+    <button onclick="testProxy()">Test Proxy Connection</button>
+    <div id="result"></div>
+
+    <script>
+        async function displayResult(message) {
+            document.getElementById('result').innerHTML += '<p>' + message + '</p>';
+        }
+
+        async function testProxy() {
+            try {
+                displayResult('Testing proxy connection...');
+                const response = await fetch('/api/auth/test');
+                const data = await response.json();
+                displayResult('Proxy connection success: ' + JSON.stringify(data));
+            } catch (error) {
+                displayResult('Proxy connection error: ' + error.message);
+                console.error('Proxy connection error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

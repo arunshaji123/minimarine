@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cargo Form Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a8b; }
+        #results { margin-top: 20px; }
+        .form-field { margin: 10px 0; }
+        .form-field label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-field input, .form-field select, .form-field textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .required { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Cargo Shipment Form Debug</h1>
+    
+    <div class="test-section">
+        <h3>Test Cargo Shipment Form Submission</h3>
+        <form id="cargoForm">
+            <div class="form-field">
+                <label for="reference">Reference <span class="required">*</span></label>
+                <input type="text" id="reference" name="reference" value="TEST001" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="description">Description <span class="required">*</span></label>
+                <textarea id="description" name="description" rows="3" required>Test cargo shipment for debugging</textarea>
+            </div>
+            
+            <div class="form-field">
+                <label for="cargoType">Cargo Type <span class="required">*</span></label>
+                <select id="cargoType" name="cargoType" required>
+                    <option value="Container">Container</option>
+                    <option value="Bulk">Bulk</option>
+                    <option value="Liquid">Liquid</option>
+                </select>
+            </div>
+            
+            <div class="form-field">
+                <label for="quantityValue">Quantity Value <span class="required">*</span></label>
+                <input type="number" id="quantityValue" name="quantity.value" value="20" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="quantityUnit">Quantity Unit <span class="required">*</span></label>
+                <select id="quantityUnit" name="quantity.unit" required>
+                    <option value="TEU">TEU</option>
+                    <option value="MT">MT</option>
+                </select>
+            </div>
+            
+            <div class="form-field">
+                <label for="weightValue">Weight Value <span class="required">*</span></label>
+                <input type="number" id="weightValue" name="weight.value" value="500" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="weightUnit">Weight Unit <span class="required">*</span></label>
+                <select id="weightUnit" name="weight.unit" required>
+                    <option value="MT">MT</option>
+                    <option value="KG">KG</option>
+                </select>
+            </div>
+            
+            <div class="form-field">
+                <label for="vessel">Vessel ID <span class="required">*</span></label>
+                <input type="text" id="vessel" name="vessel" value="68c6b2621b22938c842dde52" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="voyageNumber">Voyage Number <span class="required">*</span></label>
+                <input type="text" id="voyageNumber" name="voyage.number" value="V001" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="departurePort">Departure Port <span class="required">*</span></label>
+                <input type="text" id="departurePort" name="voyage.departurePort" value="Singapore" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="departureDate">Departure Date <span class="required">*</span></label>
+                <input type="date" id="departureDate" name="voyage.departureDate" value="2024-01-15" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="arrivalPort">Arrival Port <span class="required">*</span></label>
+                <input type="text" id="arrivalPort" name="voyage.arrivalPort" value="Rotterdam" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="arrivalDate">Arrival Date <span class="required">*</span></label>
+                <input type="date" id="arrivalDate" name="voyage.estimatedArrivalDate" value="2024-02-15" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="shipperName">Shipper Name <span class="required">*</span></label>
+                <input type="text" id="shipperName" name="shipper.name" value="Test Shipper" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="shipperContact">Shipper Contact <span class="required">*</span></label>
+                <input type="text" id="shipperContact" name="shipper.contact" value="John Doe" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="shipperEmail">Shipper Email <span class="required">*</span></label>
+                <input type="email" id="shipperEmail" name="shipper.email" value="shipper@test.com" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="shipperPhone">Shipper Phone <span class="required">*</span></label>
+                <input type="text" id="shipperPhone" name="shipper.phone" value="+1234567890" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="consigneeName">Consignee Name <span class="required">*</span></label>
+                <input type="text" id="consigneeName" name="consignee.name" value="Test Consignee" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="consigneeContact">Consignee Contact <span class="required">*</span></label>
+                <input type="text" id="consigneeContact" name="consignee.contact" value="Jane Smith" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="consigneeEmail">Consignee Email <span class="required">*</span></label>
+                <input type="email" id="consigneeEmail" name="consignee.email" value="consignee@test.com" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="consigneePhone">Consignee Phone <span class="required">*</span></label>
+                <input type="text" id="consigneePhone" name="consignee.phone" value="+0987654321" required>
+            </div>
+            
+            <div class="form-field">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="Booked">Booked</option>
+                    <option value="In Transit">In Transit</option>
+                    <option value="Delivered">Delivered</option>
+                </select>
+            </div>
+            
+            <button type="submit">Test Submit Cargo Shipment</button>
+        </form>
+        <div id="form-result"></div>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const logDiv = document.createElement('div');
+            logDiv.className = `test-section ${type}`;
+            logDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(logDiv);
+            console.log(`[DEBUG] ${message}`);
+        }
+
+        document.getElementById('cargoForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            log('Form submission started...', 'info');
+            
+            // Collect form data
+            const formData = new FormData(this);
+            const data = {};
+            
+            // Convert FormData to object
+            for (let [key, value] of formData.entries()) {
+                if (key.includes('.')) {
+                    const [parent, child] = key.split('.');
+                    if (!data[parent]) data[parent] = {};
+                    data[parent][child] = value;
+                } else {
+                    data[key] = value;
+                }
+            }
+            
+            // Convert nested objects for quantity and weight
+            data.quantity = {
+                value: parseInt(data.quantity.value),
+                unit: data.quantity.unit
+            };
+            
+            data.weight = {
+                value: parseInt(data.weight.value),
+                unit: data.weight.unit
+            };
+            
+            log('Form data prepared:', 'info');
+            console.log('Form data:', data);
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/shipments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'test-token')
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('form-result').innerHTML = 
+                        `<div class="success">✅ Cargo shipment created successfully: ${result.reference}<br>
+                        Collection: cargooshipment<br>
+                        Description: ${result.description}</div>`;
+                    log(`Cargo shipment created: ${result.reference}`, 'success');
+                } else {
+                    document.getElementById('form-result').innerHTML = 
+                        `<div class="error">❌ Cargo shipment creation failed: ${result.msg || result.message || 'Unknown error'}<br>
+                        Status: ${response.status}<br>
+                        Errors: ${result.errors ? result.errors.join(', ') : 'None'}</div>`;
+                    log(`Cargo shipment creation failed: ${result.msg || result.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('form-result').innerHTML = 
+                    `<div class="error">❌ Request failed: ${error.message}</div>`;
+                log(`Request failed: ${error.message}`, 'error');
+            }
+        });
+
+        // Log when page loads
+        window.addEventListener('load', function() {
+            log('Cargo form debug page loaded', 'info');
+        });
+    </script>
+</body>
+</html>
+
+
+

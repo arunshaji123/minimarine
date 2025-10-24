@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Google Authentication</title>
+</head>
+<body>
+    <h1>Test Google Authentication</h1>
+    <p>Open the browser console and check the logs when you test Google authentication.</p>
+    <p>Go to <a href="http://localhost:3000/login" target="_blank">http://localhost:3000/login</a> to test.</p>
+    
+    <h2>Debugging Steps:</h2>
+    <ol>
+        <li>Open browser console (F12)</li>
+        <li>Go to login page</li>
+        <li>Click "Continue with Google"</li>
+        <li>Complete Google authentication</li>
+        <li>Check console logs for:
+            <ul>
+                <li>"FirebaseAuthContext: Dispatching auth-token-updated event"</li>
+                <li>"AuthContext: Received auth-token-updated event"</li>
+                <li>"AuthContext: Loading user profile..."</li>
+                <li>"AuthContext: Token found: true"</li>
+                <li>"AuthContext: Making API call to /api/auth/profile"</li>
+                <li>"AuthContext: Profile response: ..."</li>
+            </ul>
+        </li>
+    </ol>
+    
+    <h2>Common Issues:</h2>
+    <ul>
+        <li>If you see "Token found: false" - Firebase authentication didn't work</li>
+        <li>If you see "Error fetching user profile" - Backend API issue</li>
+        <li>If you don't see the auth-token-updated event - Context communication issue</li>
+    </ul>
+</body>
+</html>
+
+
+
+
+

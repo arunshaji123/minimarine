@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marine Survey Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f8ff;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Marine Survey Application Demo</h1>
+        <p>This demo shows that the backend API is working correctly.</p>
+        
+        <button onclick="testAPI()">Test API Connection</button>
+        <button onclick="testAuth()">Test Authentication</button>
+        <button onclick="testUsers()">Test Users Endpoint</button>
+        
+        <div id="result" class="result">Click a button above to test the API.</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5002/api';
+        
+        async function showResult(message, isSuccess = true) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = 'result ' + (isSuccess ? 'success' : 'error');
+        }
+        
+        async function testAPI() {
+            try {
+                const response = await fetch(`${API_BASE}/test`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2), true);
+            } catch (error) {
+                showResult(`Error: ${error.message}`, false);
+            }
+        }
+        
+        async function testAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/test`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2), true);
+            } catch (error) {
+                showResult(`Error: ${error.message}`, false);
+            }
+        }
+        
+        async function testUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/users`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2), true);
+            } catch (error) {
+                showResult(`Error: ${error.message}`, false);
+            }
+        }
+    </script>
+</body>
+</html>

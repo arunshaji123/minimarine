@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Axios</title>
+</head>
+<body>
+    <h1>Test Axios</h1>
+    <button onclick="testAxios()">Test Axios Connection</button>
+    <div id="result"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        async function displayResult(message) {
+            document.getElementById('result').innerHTML += '<p>' + message + '</p>';
+        }
+
+        async function testAxios() {
+            try {
+                displayResult('Testing axios connection...');
+                // Set baseURL for axios
+                axios.defaults.baseURL = '/api';
+                displayResult('BaseURL set to: ' + axios.defaults.baseURL);
+                const response = await axios.get('/auth/test');
+                displayResult('Axios connection success: ' + JSON.stringify(response.data));
+            } catch (error) {
+                displayResult('Axios connection error: ' + error.message);
+                console.error('Axios connection error:', error);
+                if (error.response) {
+                    displayResult('Error response: ' + JSON.stringify(error.response.data));
+                }
+            }
+        }
+    </script>
+</body>
+</html>

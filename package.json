@@ -1,0 +1,30 @@
+{
+  "name": "marine-survey",
+  "version": "1.0.0",
+  "description": "Marine Survey Application with React frontend and Node.js backend",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm start",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "marine",
+    "survey",
+    "react",
+    "nodejs",
+    "mongodb"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "axios": "^1.12.2",
+    "firebase": "^12.2.1",
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1"
+  }
+}

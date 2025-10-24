@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cargo Shipment Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a8b; }
+        #results { margin-top: 20px; }
+        .shipment-item { padding: 10px; margin: 5px 0; background: #f8f9fa; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Cargo Shipment Collection Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Test Cargo Shipment Creation</h3>
+        <button onclick="createTestShipment()">Create Test Cargo Shipment</button>
+        <div id="creation-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Test Cargo Shipment Collection</h3>
+        <button onclick="loadShipments()">Load All Cargo Shipments from cargooshipment collection</button>
+        <div id="collection-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Test with Authentication</h3>
+        <p>For this test, you need to be logged in. Go to <a href="http://localhost:3000/login" target="_blank">http://localhost:3000/login</a> and sign in, then come back here.</p>
+        <button onclick="testWithAuth()">Test with Current Auth</button>
+        <div id="auth-result"></div>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const logDiv = document.createElement('div');
+            logDiv.className = `test-section ${type}`;
+            logDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(logDiv);
+            console.log(`[TEST] ${message}`);
+        }
+
+        async function createTestShipment() {
+            const testShipment = {
+                reference: 'TEST' + Date.now(),
+                description: 'Test cargo shipment for cargooshipment collection',
+                cargoType: 'Container',
+                quantity: {
+                    value: 20,
+                    unit: 'TEU'
+                },
+                weight: {
+                    value: 500,
+                    unit: 'MT'
+                },
+                vessel: '68c6b2621b22938c842dde52', // Use existing vessel ID
+                voyage: {
+                    number: 'V001',
+                    departurePort: 'Singapore',
+                    departureDate: '2024-01-15',
+                    arrivalPort: 'Rotterdam',
+                    estimatedArrivalDate: '2024-02-15'
+                },
+                shipper: {
+                    name: 'Test Shipper',
+                    contact: 'John Doe',
+                    email: 'shipper@test.com',
+                    phone: '+1234567890'
+                },
+                consignee: {
+                    name: 'Test Consignee',
+                    contact: 'Jane Smith',
+                    email: 'consignee@test.com',
+                    phone: '+0987654321'
+                },
+                status: 'Booked',
+                specialRequirements: 'Temperature controlled',
+                notes: 'Test shipment for cargooshipment collection'
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/api/shipments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'test-token')
+                    },
+                    body: JSON.stringify(testShipment)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('creation-result').innerHTML = 
+                        `<div class="success">✅ Cargo shipment created successfully: ${data.reference}<br>
+                        Collection: cargooshipment<br>
+                        Description: ${data.description}</div>`;
+                    log(`Cargo shipment created: ${data.reference}`, 'success');
+                } else {
+                    document.getElementById('creation-result').innerHTML = 
+                        `<div class="error">❌ Cargo shipment creation failed: ${data.msg || data.message || 'Unknown error'}</div>`;
+                    log(`Cargo shipment creation failed: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('creation-result').innerHTML = 
+                    `<div class="error">❌ Request failed: ${error.message}</div>`;
+                log(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadShipments() {
+            try {
+                const response = await fetch('http://localhost:5000/api/shipments', {
+                    headers: {
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'test-token')
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const container = document.getElementById('collection-result');
+                    container.innerHTML = `<div class="success">✅ Found ${data.length} cargo shipments in cargooshipment collection:</div>`;
+                    
+                    data.forEach(shipment => {
+                        const shipmentDiv = document.createElement('div');
+                        shipmentDiv.className = 'shipment-item';
+                        shipmentDiv.innerHTML = `
+                            <strong>${shipment.reference}</strong> - ${shipment.description}<br>
+                            Type: ${shipment.cargoType} | Status: ${shipment.status}<br>
+                            Vessel: ${shipment.vessel?.name || 'N/A'} | Route: ${shipment.voyage?.departurePort} → ${shipment.voyage?.arrivalPort}<br>
+                            Created: ${new Date(shipment.createdAt).toLocaleString()}
+                        `;
+                        container.appendChild(shipmentDiv);
+                    });
+                    
+                    log(`Loaded ${data.length} cargo shipments from cargooshipment collection`, 'success');
+                } else {
+                    document.getElementById('collection-result').innerHTML = 
+                        `<div class="error">❌ Failed to load cargo shipments: ${data.msg || data.message || 'Unknown error'}</div>`;
+                    log(`Failed to load cargo shipments: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('collection-result').innerHTML = 
+                    `<div class="error">❌ Request failed: ${error.message}</div>`;
+                log(`Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWithAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                document.getElementById('auth-result').innerHTML = 
+                    `<div class="error">❌ No authentication token found. Please log in first.</div>`;
+                return;
+            }
+
+            try {
+                // Test cargo shipment creation with auth
+                const testShipment = {
+                    reference: 'AUTH' + Date.now(),
+                    description: 'Authenticated cargo shipment test',
+                    cargoType: 'Bulk',
+                    quantity: {
+                        value: 100,
+                        unit: 'MT'
+                    },
+                    weight: {
+                        value: 1000,
+                        unit: 'MT'
+                    },
+                    vessel: '68c6b2621b22938c842dde52',
+                    voyage: {
+                        number: 'V002',
+                        departurePort: 'Hamburg',
+                        departureDate: '2024-01-20',
+                        arrivalPort: 'New York',
+                        estimatedArrivalDate: '2024-02-20'
+                    },
+                    shipper: {
+                        name: 'Auth Shipper',
+                        contact: 'Auth Contact',
+                        email: 'auth@shipper.com',
+                        phone: '+1111111111'
+                    },
+                    consignee: {
+                        name: 'Auth Consignee',
+                        contact: 'Auth Consignee Contact',
+                        email: 'auth@consignee.com',
+                        phone: '+2222222222'
+                    },
+                    status: 'In Transit',
+                    specialRequirements: 'Hazardous materials',
+                    notes: 'Authenticated test shipment'
+                };
+
+                const response = await fetch('http://localhost:5000/api/shipments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(testShipment)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('auth-result').innerHTML = 
+                        `<div class="success">✅ Authenticated cargo shipment creation successful: ${data.reference}<br>
+                        Collection: cargooshipment<br>
+                        Status: ${data.status}</div>`;
+                    log(`Authenticated cargo shipment created: ${data.reference}`, 'success');
+                } else {
+                    document.getElementById('auth-result').innerHTML = 
+                        `<div class="error">❌ Authenticated cargo shipment creation failed: ${data.msg || data.message}</div>`;
+                    log(`Authenticated cargo shipment creation failed: ${data.msg || data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('auth-result').innerHTML = 
+                    `<div class="error">❌ Authenticated request failed: ${error.message}</div>`;
+                log(`Authenticated request failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-load shipments on page load
+        window.addEventListener('load', function() {
+            log('Cargo shipment test page loaded', 'info');
+            loadShipments();
+        });
+    </script>
+</body>
+</html>
+
+
+

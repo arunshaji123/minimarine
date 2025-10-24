@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Proxy</title>
+</head>
+<body>
+    <h1>Debug Proxy</h1>
+    <button onclick="testDirect()">Test Direct Backend Connection</button>
+    <button onclick="testProxy()">Test Proxy Connection</button>
+    <button onclick="testAxios()">Test Axios Connection</button>
+    <div id="result"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        async function displayResult(message) {
+            document.getElementById('result').innerHTML += '<p>' + message + '</p>';
+        }
+
+        async function testDirect() {
+            try {
+                displayResult('Testing direct connection to backend...');
+                const response = await fetch('http://localhost:5003/api/auth/test');
+                const data = await response.json();
+                displayResult('Direct connection success: ' + JSON.stringify(data));
+            } catch (error) {
+                displayResult('Direct connection error: ' + error.message);
+                console.error('Direct connection error:', error);
+            }
+        }
+
+        async function testProxy() {
+            try {
+                displayResult('Testing proxy connection...');
+                const response = await fetch('/api/auth/test');
+                const data = await response.json();
+                displayResult('Proxy connection success: ' + JSON.stringify(data));
+            } catch (error) {
+                displayResult('Proxy connection error: ' + error.message);
+                console.error('Proxy connection error:', error);
+            }
+        }
+
+        async function testAxios() {
+            try {
+                displayResult('Testing axios connection...');
+                // Set baseURL for axios
+                axios.defaults.baseURL = '/api';
+                const response = await axios.get('/auth/test');
+                displayResult('Axios connection success: ' + JSON.stringify(response.data));
+            } catch (error) {
+                displayResult('Axios connection error: ' + error.message);
+                console.error('Axios connection error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

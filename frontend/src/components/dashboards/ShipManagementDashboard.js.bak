@@ -1,0 +1,2628 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+import DashboardLayout from '../layouts/DashboardLayout';
+import UserProfileModal from '../UserProfileModal.jsx';
+import SurveyorBookingModal from '../modals/SurveyorBookingModal';
+import CargoManagerBookingModal from '../modals/CargoManagerBookingModal';
+import { useAuth } from '../../context/AuthContext';
+import axios from 'axios';
+
+export default function ShipManagementDashboard() {
+  const { user } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
+  const [vessels, setVessels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingVessel, setEditingVessel] = useState(null);
+  
+  // User management state
+  const [cargoManagers, setCargoManagers] = useState([]);
+  const [surveyors, setSurveyors] = useState([]);
+  const [userStats, setUserStats] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  
+  // Booking state
+  const [showSurveyorBookingModal, setShowSurveyorBookingModal] = useState(false);
+  const [showCargoManagerBookingModal, setShowCargoManagerBookingModal] = useState(false);
+  const [surveyorBookings, setSurveyorBookings] = useState([]);
+  const [cargoManagerBookings, setCargoManagerBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [editingSurveyorBooking, setEditingSurveyorBooking] = useState(null);
+  const [editingCargoManagerBooking, setEditingCargoManagerBooking] = useState(null);
+
+  const [detailsModal, setDetailsModal] = useState({ open: false, type: null, booking: null });
+  
+  // Assignment functionality removed as per requirements
+  
+  // Maintenance schedule and crew assignments state
+  const [maintenanceSchedule, setMaintenanceSchedule] = useState([]);
+  const [crewAssignments, setCrewAssignments] = useState([]);
+
+  // Service Requests state
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [srLoading, setSrLoading] = useState(false);
+  const [serviceRequestDetailsModal, setServiceRequestDetailsModal] = useState({ open: false, request: null });
+
+  // Navigation state
+  const [activeSection, setActiveSection] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const loadServiceRequests = async () => {
+    try {
+      setSrLoading(true);
+      const res = await axios.get('/api/service-requests'); // role-aware: ship_management sees assigned ones
+      setServiceRequests(res.data?.requests || []);
+    } catch (e) {
+      console.error('Failed to load service requests', e);
+      setError('Failed to load service requests');
+    } finally {
+      setSrLoading(false);
+    }
+  };
+
+  const actOnRequest = async (id, action, note) => {
+    try {
+      const url = `/api/service-requests/${id}/${action}`; // action: accept | decline
+      await axios.post(url, note ? { note } : {});
+      await loadServiceRequests();
+      setSuccessMessage(`Request ${action}ed`);
+      setTimeout(() => setSuccessMessage(null), 2500);
+    } catch (e) {
+      console.error('Failed to update request', e);
+      setError(e.response?.data?.message || 'Failed to update request');
+    }
+  };
+
+  const handleServiceRequestClick = (request) => {
+    setServiceRequestDetailsModal({ open: true, request });
+  };
+
+  // Load vessels, users, bookings, and service requests on component mount
+  useEffect(() => {
+    loadVessels();
+    loadUsers();
+    loadBookings();
+    loadServiceRequests();
+  }, []);
+
+  // Unread counts for messaging
+  const { counts } = useUnreadCounts();
+
+  const loadVessels = async () => {
+    try {
+      setLoading(true);
+      console.log('Loading vessels...');
+      const response = await axios.get('/api/vessels');
+      console.log('Vessels loaded:', response.data.length, 'vessels');
+      console.log('Vessels data:', response.data);
+      setVessels(response.data);
+    } catch (err) {
+      console.error('Error loading vessels:', err);
+      setError('Failed to load ships');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      setUsersLoading(true);
+      console.log('Loading users...');
+      
+      // Load cargo managers and surveyors in parallel
+      const [cargoManagersRes, surveyorsRes, statsRes] = await Promise.all([
+        axios.get('/api/user-management/cargo-managers'),
+        axios.get('/api/user-management/surveyors'),
+        axios.get('/api/user-management/stats')
+      ]);
+      
+      setCargoManagers(cargoManagersRes.data);
+      setSurveyors(surveyorsRes.data);
+      setUserStats(statsRes.data);
+      
+      console.log('Users loaded:', {
+        cargoManagers: cargoManagersRes.data.length,
+        surveyors: surveyorsRes.data.length,
+        stats: statsRes.data
+      });
+    } catch (err) {
+      console.error('Error loading users:', err);
+      setError('Failed to load user data');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const loadBookings = async () => {
+    try {
+      setBookingsLoading(true);
+      console.log('Loading bookings...');
+
+      // Load surveyor and cargo manager bookings in parallel
+      const [surveyorBookingsRes, cargoManagerBookingsRes] = await Promise.all([
+        axios.get('/api/surveyor-bookings'),
+        axios.get('/api/cargo-manager-bookings')
+      ]);
+      
+      setSurveyorBookings(surveyorBookingsRes.data);
+      setCargoManagerBookings(cargoManagerBookingsRes.data);
+      
+      console.log('Bookings loaded:', {
+        surveyorBookings: surveyorBookingsRes.data.length,
+        cargoManagerBookings: cargoManagerBookingsRes.data.length
+      });
+    } catch (err) {
+      console.error('Error loading bookings:', err);
+      setError('Failed to load booking data');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const handleSurveyorBooking = async (bookingData) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      let response;
+      if (editingSurveyorBooking) {
+        console.log('Updating surveyor booking:', bookingData);
+        response = await axios.put(`/api/surveyor-bookings/${editingSurveyorBooking._id}`, bookingData, config);
+        console.log('Surveyor booking updated successfully:', response.data);
+        setSuccessMessage('Surveyor booking updated successfully!');
+      } else {
+        console.log('Creating surveyor booking:', bookingData);
+        response = await axios.post('/api/surveyor-bookings', bookingData, config);
+        console.log('Surveyor booking created successfully:', response.data);
+        setSuccessMessage('Surveyor booking created successfully!');
+      }
+      
+      setShowSurveyorBookingModal(false);
+      setEditingSurveyorBooking(null);
+      loadBookings(); // Reload bookings
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving surveyor booking:', err);
+      setError(`Failed to ${editingSurveyorBooking ? 'update' : 'create'} surveyor booking`);
+    }
+  };
+
+  const handleEditSurveyorBooking = (booking) => {
+    setEditingSurveyorBooking(booking);
+    setShowSurveyorBookingModal(true);
+  };
+
+  const handleDeleteSurveyorBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to delete this surveyor booking?')) {
+      return;
+    }
+    
+    try {
+      setBookingsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/api/surveyor-bookings/${bookingId}`, config);
+      setSuccessMessage('Surveyor booking deleted successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting surveyor booking:', err);
+      setError('Failed to delete surveyor booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const handleCargoManagerBooking = async (bookingData) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      let response;
+      if (editingCargoManagerBooking) {
+        console.log('Updating cargo manager booking:', bookingData);
+        response = await axios.put(`/api/cargo-manager-bookings/${editingCargoManagerBooking._id}`, bookingData, config);
+        console.log('Cargo manager booking updated successfully:', response.data);
+        setSuccessMessage('Cargo manager booking updated successfully!');
+      } else {
+        console.log('Creating cargo manager booking:', bookingData);
+        response = await axios.post('/api/cargo-manager-bookings', bookingData, config);
+        console.log('Cargo manager booking created successfully:', response.data);
+        setSuccessMessage('Cargo manager booking created successfully!');
+      }
+      
+      setShowCargoManagerBookingModal(false);
+      setEditingCargoManagerBooking(null);
+      loadBookings(); // Reload bookings
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving cargo manager booking:', err);
+      setError(`Failed to ${editingCargoManagerBooking ? 'update' : 'create'} cargo manager booking`);
+    }
+  };
+
+  const handleEditCargoManagerBooking = (booking) => {
+    setEditingCargoManagerBooking(booking);
+    setShowCargoManagerBookingModal(true);
+  };
+
+  const handleDeleteCargoManagerBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to delete this cargo manager booking?')) {
+      return;
+    }
+    
+    try {
+      setBookingsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/api/cargo-manager-bookings/${bookingId}`, config);
+      setSuccessMessage('Cargo manager booking deleted successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting cargo manager booking:', err);
+      setError('Failed to delete cargo manager booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const handleAddVessel = async (vesselData) => {
+    try {
+      console.log('Submitting vessel data:', vesselData);
+      const response = await axios.post('/api/vessels', vesselData);
+      console.log('Vessel created successfully:', response.data);
+      
+      // Add the new vessel to the state
+      setVessels(prev => {
+        const newVessels = [response.data, ...prev];
+        console.log('Updated vessels list:', newVessels.length, 'vessels');
+        return newVessels;
+      });
+      
+      setShowAddModal(false);
+      setError(null); // Clear any previous errors
+      setSuccessMessage(`Ship "${vesselData.name}" created successfully!`);
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      console.error('Error adding vessel:', err);
+      if (err.response) {
+        console.error('Error response:', err.response.data);
+        const errorData = err.response.data;
+        let errorMessage = 'Failed to add ship: ';
+        
+        if (errorData.msg) {
+          errorMessage += errorData.msg;
+        } else if (errorData.message) {
+          errorMessage += errorData.message;
+        } else {
+          errorMessage += 'Unknown error';
+        }
+        
+        // Add validation errors if present
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          errorMessage += '\n' + errorData.errors.join('\n');
+        }
+        
+        setError(errorMessage);
+      } else {
+        setError('Failed to add ship: Network error');
+      }
+    }
+  };
+
+  const [uploading, setUploading] = useState(false);
+
+  const handleFlightTicketUpload = async (bookingId, file) => {
+    try {
+      setUploading(true);
+      
+      // Validate file size (10MB max)
+      const maxFileSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxFileSize) {
+        setError('File size exceeds 10MB limit');
+        return;
+      }
+      
+      // Validate file type (images and PDFs allowed)
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+      if (!validTypes.includes(file.type.toLowerCase())) {
+        setError('Invalid file type. Only images and PDF files are allowed.');
+        return;
+      }
+
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const fileData = {
+            name: file.name,
+            data: reader.result,
+            file: file
+          };
+
+          // Send to backend
+          const token = localStorage.getItem('token');
+          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+          
+          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
+            flightTicket: fileData
+          }, config);
+          
+          setSuccessMessage('Flight ticket uploaded successfully!');
+          loadBookings(); // Reload bookings to show updated data
+        } catch (err) {
+          console.error('Error uploading flight ticket:', err);
+          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error processing file:', err);
+      setError('Failed to process file');
+      setUploading(false);
+    }
+  };
+
+  const handleUpdateVessel = async (id, vesselData) => {
+    try {
+      const response = await axios.put(`/api/vessels/${id}`, vesselData);
+      setVessels(prev => prev.map(vessel => 
+        vessel._id === id ? response.data : vessel
+      ));
+      setEditingVessel(null);
+    } catch (err) {
+      console.error('Error updating vessel:', err);
+      setError('Failed to update ship');
+    }
+  };
+
+  const handleDeleteVessel = async (id) => {
+    if (window.confirm('Are you sure you want to delete this ship?')) {
+      try {
+        await axios.delete(`/api/vessels/${id}`);
+        setVessels(prev => prev.filter(vessel => vessel._id !== id));
+      } catch (err) {
+        console.error('Error deleting vessel:', err);
+        setError('Failed to delete ship');
+      }
+    }
+  };
+
+  // Assignment functionality removed as per requirements
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+
+  // Navigation configuration
+  const navigationItems = [
+    {
+      id: 'overview',
+      name: 'Overview',
+      icon: '📊',
+      description: 'Dashboard overview and statistics'
+    },
+    {
+      id: 'fleet',
+      name: 'Fleet Management',
+      icon: '🚢',
+      description: 'Manage vessels and fleet operations'
+    },
+    {
+      id: 'personnel',
+      name: 'Personnel',
+      icon: '👥',
+      description: 'Cargo managers and surveyors'
+    },
+    {
+      id: 'service-requests',
+      name: 'Service Requests',
+      icon: '📋',
+      description: 'Owner service requests'
+    },
+    {
+      id: 'bookings',
+      name: 'Bookings',
+      icon: '📅',
+      description: 'Surveyor and cargo manager bookings'
+    },
+    {
+      id: 'maintenance',
+      name: 'Ship Insights',
+      icon: '🔧',
+      description: 'Maintenance schedule and crew assignments'
+    }
+  ];
+
+  const formatLastLogin = (lastLoginAt) => {
+    if (!lastLoginAt) return 'Never logged in';
+    const now = new Date();
+    const lastLogin = new Date(lastLoginAt);
+    const diffInHours = Math.floor((now - lastLogin) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)} days ago`;
+    return formatDate(lastLoginAt);
+  };
+
+  const getUserStatus = (lastLoginAt) => {
+    if (!lastLoginAt) return { text: 'Never logged in', color: 'text-gray-500' };
+    const now = new Date();
+    const lastLogin = new Date(lastLoginAt);
+    const diffInHours = Math.floor((now - lastLogin) / (1000 * 60 * 60));
+    
+    if (diffInHours < 24) return { text: 'Active', color: 'text-green-600' };
+    if (diffInHours < 168) return { text: 'Recently active', color: 'text-yellow-600' };
+    return { text: 'Inactive', color: 'text-red-600' };
+  };
+
+  return (
+    <DashboardLayout
+      title="Ship Management Dashboard"
+      description="Fleet management, crew assignments, and maintenance schedules."
+      onProfileClick={() => setShowProfile((s) => !s)}
+    >
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar */}
+        <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+          <div className="flex items-center justify-between h-16 px-6 bg-marine-blue">
+            <h2 className="text-lg font-semibold text-white">Navigation</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-white hover:text-gray-200"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <nav className="mt-8 px-4">
+            {navigationItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveSection(item.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center px-4 py-3 mb-2 text-left rounded-lg transition-colors duration-200 ${
+                  activeSection === item.id
+                    ? 'bg-marine-blue text-white shadow-md'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <span className="text-xl mr-3">{item.icon}</span>
+                <div className="flex-1">
+                  <div className="font-medium">{item.name}</div>
+                  <div className={`text-xs ${activeSection === item.id ? 'text-blue-100' : 'text-gray-500'}`}>
+                    {item.description}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
+          {/* Mobile header */}
+          <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1 className="text-lg font-semibold text-gray-900">
+              {navigationItems.find(item => item.id === activeSection)?.name || 'Dashboard'}
+            </h1>
+            <div className="w-6"></div>
+          </div>
+
+          {/* Content area */}
+          <div className="flex-1 overflow-auto p-6">
+              <div className="space-y-6">
+                {/* Success Message */}
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-800">Success</h3>
+                <div className="mt-2 text-sm text-green-700">
+                  <p>{successMessage}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{error}</p>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={() => setError(null)}
+                    className="bg-red-50 px-2 py-1.5 rounded-md text-sm font-medium text-red-800 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-red-50 focus:ring-red-600"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Overview Section */}
+        {activeSection === 'overview' && (
+          <>
+            {/* User Statistics */}
+            {userStats.length > 0 && (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">User Statistics</h3>
+                  <p className="mt-1 max-w-2xl text-sm text-gray-500">Overview of user activity by role</p>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {userStats
+                      .filter(stat => stat._id.toLowerCase() !== 'admin' && stat._id.toLowerCase() !== 'ship_management')
+                      .map((stat, index) => (
+                        <div key={index} className="bg-gray-50 rounded-lg p-4">
+                          <div className="text-2xl font-bold text-marine-blue">{stat.count}</div>
+                          <div className="text-sm text-gray-600 capitalize">{stat._id}s</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Fleet Management Section */}
+        {activeSection === 'fleet' && (
+          <>
+            {/* Fleet Overview */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Fleet Overview</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Current status of all vessels under management</p>
+            </div>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+            >
+              Add Ship
+            </button>
+          </div>
+          
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-marine-blue"></div>
+              <p className="mt-2 text-gray-600">Loading ships...</p>
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <p className="text-red-600">{error}</p>
+              <button 
+                onClick={loadVessels}
+                className="mt-2 text-marine-blue hover:text-marine-dark"
+              >
+                Retry
+              </button>
+            </div>
+          ) : vessels.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">No ships found</p>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="mt-2 text-marine-blue hover:text-marine-dark"
+              >
+                Add your first ship
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SHIP NAME</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IMO Number</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Flag</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year Built</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Tonnage</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {vessels.map((vessel) => (
+                    <tr key={vessel._id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{vessel.name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{vessel.imo}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{vessel.vesselType}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{vessel.flag}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{vessel.yearBuilt}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{vessel.grossTonnage?.toLocaleString()}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button 
+                          onClick={() => setEditingVessel(vessel)}
+                          className="text-marine-blue hover:text-marine-dark mr-3"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteVessel(vessel._id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+          </>
+        )}
+
+        {/* Personnel Section */}
+        {activeSection === 'personnel' && (
+          <>
+            {/* User Management Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Cargo Managers */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Cargo Managers</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Active cargo management personnel</p>
+            </div>
+            <div className="overflow-x-auto">
+              {usersLoading ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-marine-blue mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading cargo managers...</p>
+                </div>
+              ) : cargoManagers.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No cargo managers found</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {cargoManagers.map((manager) => {
+                      const status = getUserStatus(manager.lastLoginAt);
+                      return (
+                        <tr key={manager._id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-marine-blue flex items-center justify-center">
+                                  <span className="text-sm font-medium text-white">
+                                    {manager.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{manager.name}</div>
+                                <div className="text-sm text-gray-500">Cargo Manager</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {manager.email}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${status.color}`}>
+                              {status.text}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatLastLogin(manager.lastLoginAt)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <span className="text-gray-400">—</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Surveyors */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Surveyors</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Active survey personnel</p>
+            </div>
+            <div className="overflow-x-auto">
+              {usersLoading ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-marine-blue mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading surveyors...</p>
+                </div>
+              ) : surveyors.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No surveyors found</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {surveyors.map((surveyor) => {
+                      const status = getUserStatus(surveyor.lastLoginAt);
+                      return (
+                        <tr key={surveyor._id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center">
+                                  <span className="text-sm font-medium text-white">
+                                    {surveyor.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{surveyor.name}</div>
+                                <div className="text-sm text-gray-500">Surveyor</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {surveyor.email}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${status.color}`}>
+                              {status.text}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatLastLogin(surveyor.lastLoginAt)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <span className="text-gray-400">—</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+          </>
+        )}
+
+        {/* Service Requests Section */}
+        {activeSection === 'service-requests' && (
+          <>
+            {/* Service Requests Inbox */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Service Requests</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Requests sent by owners to your company</p>
+            </div>
+            <button onClick={loadServiceRequests} className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-md text-sm">Refresh</button>
+          </div>
+          {srLoading ? (
+            <div className="p-6 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-marine-blue mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading requests...</p>
+            </div>
+          ) : serviceRequests.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">No service requests</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SL</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SHIP</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {serviceRequests.map((r, index) => (
+                    <tr key={r._id} onClick={() => handleServiceRequestClick(r)} className="cursor-pointer hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{index + 1}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{r.title}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{r.vessel?.name || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{r.owner?.name || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${r.status === 'accepted' ? 'bg-green-100 text-green-800' : r.status === 'declined' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {r.status === 'pending' ? (
+                          <div className="space-x-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); actOnRequest(r._id, 'accept'); }} 
+                              className="text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded"
+                            >
+                              Accept
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); actOnRequest(r._id, 'decline'); }} 
+                              className="text-white bg-red-600 hover:bg-red-700 px-3 py-1 rounded"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* User Statistics */}
+        {userStats.length > 0 && (
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">User Statistics</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">Overview of user activity by role</p>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {userStats
+                  .filter(stat => stat._id.toLowerCase() !== 'admin' && stat._id.toLowerCase() !== 'ship_management')
+                  .map((stat) => (
+                  <div key={stat._id} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                          stat._id === 'cargo_manager' ? 'bg-marine-blue' :
+                          stat._id === 'surveyor' ? 'bg-green-600' :
+                          stat._id === 'ship_management' ? 'bg-blue-600' :
+                          'bg-gray-600'
+                        }`}>
+                          <span className="text-sm font-medium text-white">
+                            {stat._id.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-900 capitalize">
+                          {stat._id.replace('_', ' ')}s
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900">{stat.count}</p>
+                        {stat.lastLogin && (
+                          <p className="text-xs text-gray-500">
+                            Last active: {formatLastLogin(stat.lastLogin)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+          </>
+        )}
+
+        {/* Bookings Section */}
+        {activeSection === 'bookings' && (
+          <>
+            {/* Booking Management */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Surveyor Bookings */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Surveyor Bookings</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">Manage surveyor inspection bookings</p>
+              </div>
+              <button 
+                onClick={() => setShowSurveyorBookingModal(true)}
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Book Surveyor
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              {bookingsLoading ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading bookings...</p>
+                </div>
+              ) : surveyorBookings.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No surveyor bookings found</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surveyor</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {surveyorBookings
+                      .filter(booking => ['Pending', 'Accepted', 'Declined'].includes(booking.status))
+                      .map((booking) => (
+                      <tr key={booking._id} onClick={() => setDetailsModal({ open: true, type: 'surveyor', booking })} className="cursor-pointer hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-8 w-8">
+                              <div className="h-8 w-8 rounded-full bg-green-600 flex items-center justify-center">
+                                <span className="text-sm font-medium text-white">
+                                  {booking.surveyor?.name?.charAt(0)?.toUpperCase() || 'S'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900">{booking.surveyor?.name || 'Unknown'}</div>
+                              <div className="text-sm text-gray-500">{booking.vesselName}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{formatDate(booking.inspectionDate)}</div>
+                          <div className="text-gray-500">{booking.inspectionTime}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{booking.surveyType}</div>
+                          <div className="text-gray-500">{booking.shipType}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                            booking.status === 'Accepted' ? 'bg-green-100 text-green-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {booking.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSurveyorBooking(booking);
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSurveyorBooking(booking._id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          {/* Assignment functionality removed as per requirements */}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Cargo Manager Bookings */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Cargo Manager Bookings</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">Manage cargo manager voyage bookings</p>
+              </div>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={loadBookings}
+                  className="inline-flex justify-center py-2 px-3 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+                >
+                  Refresh Status
+                </button>
+                <button 
+                  onClick={() => setShowCargoManagerBookingModal(true)}
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+                >
+                  Book Cargo Manager
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              {bookingsLoading ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-marine-blue mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading bookings...</p>
+                </div>
+              ) : cargoManagerBookings.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No cargo manager bookings found</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo Manager</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {cargoManagerBookings
+                      .filter(booking => ['Pending', 'Accepted', 'Declined'].includes(booking.status))
+                      .map((booking) => (
+                      <tr key={booking._id} onClick={() => setDetailsModal({ open: true, type: 'cargo_manager', booking })} className="cursor-pointer hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-8 w-8">
+                              <div className="h-8 w-8 rounded-full bg-marine-blue flex items-center justify-center">
+                                <span className="text-sm font-medium text-white">
+                                  {booking.cargoManager?.name?.charAt(0)?.toUpperCase() || 'C'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900">{booking.cargoManager?.name || 'Unknown'}</div>
+                              <div className="text-sm text-gray-500">{booking.vesselName}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{formatDate(booking.inspectionDate)}</div>
+                          <div className="text-gray-500">{booking.inspectionTime}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{booking.surveyType}</div>
+                          <div className="text-gray-500">{booking.shipType}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                            booking.status === 'Accepted' ? 'bg-green-100 text-green-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {booking.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditCargoManagerBooking(booking);
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCargoManagerBooking(booking._id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          {/* Assignment functionality removed as per requirements */}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+          </>
+        )}
+
+        {/* Ship Insights Section */}
+        {activeSection === 'maintenance' && (
+          <>
+            {/* Maintenance Schedule */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Schedule</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">Scheduled maintenance tasks for all vessels</p>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {maintenanceSchedule.map((task, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-sm font-medium text-gray-900">{task.vesselName}</div>
+                      <div className="text-sm text-gray-600">{task.task}</div>
+                      <div className="text-sm text-gray-500">{formatDate(task.date)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Crew Assignments */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Crew Assignments</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">Current crew assignments for all vessels</p>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {crewAssignments.map((assignment, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-sm font-medium text-gray-900">{assignment.vesselName}</div>
+                      <div className="text-sm text-gray-600">{assignment.crewMember}</div>
+                      <div className="text-sm text-gray-500">{formatDate(assignment.startDate)} - {formatDate(assignment.endDate)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// Flight Ticket Upload Component
+function FlightTicketUpload({ bookingId, onUploadSuccess }) {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+
+    // Validate file size (10MB max)
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    if (selectedFile.size > maxFileSize) {
+      setError('File size exceeds 10MB limit');
+      setFile(null);
+      return;
+    }
+
+    // Validate file type (images and PDFs allowed)
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(selectedFile.type.toLowerCase())) {
+      setError('Invalid file type. Only images and PDF files are allowed.');
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+    setError('');
+  };
+
+  const handleUpload = async () => {
+    if (!file || !bookingId) return;
+
+    try {
+      setUploading(true);
+      setError('');
+      
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const fileData = {
+            name: file.name,
+            data: reader.result
+          };
+
+          // Send to backend
+          const token = localStorage.getItem('token');
+          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+          
+          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
+            flightTicket: fileData
+          }, config);
+          
+          setSuccess('Flight ticket uploaded successfully!');
+          setFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          
+          // Call success callback to refresh data
+          if (onUploadSuccess) {
+            setTimeout(() => {
+              onUploadSuccess();
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('Error uploading flight ticket:', err);
+          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error processing file:', err);
+      setError('Failed to process file');
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = () => {
+    setFile(null);
+    setError('');
+    setSuccess('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+          {error}
+        </div>
+      )}
+      
+      {success && (
+        <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+          {success}
+        </div>
+      )}
+      
+      <div className="flex items-start space-x-3">
+        <div className="flex-1">
+          <label className="flex justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-md hover:border-marine-blue transition-colors cursor-pointer">
+            <div className="space-y-1 text-center">
+              <svg
+                className="mx-auto h-8 w-8 text-gray-400"
+                stroke="currentColor"
+                fill="none"
+                viewBox="0 0 48 48"
+              >
+                <path
+                  d="M8 14v20c0 4.418 7.163 8 16 8 1.381 0 2.721-.087 4-.252M8 14c0 4.418 7.163 8 16 8s16-3.582 16-8M8 14c0-4.418 7.163-8 16-8s16 3.582 16 8m0 0v14m0-4c0 4.418-7.163 8-16 8S8 28.418 8 24m32 10v6m0 0v6m0-6h6m-6 0h-6"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div className="text-sm text-gray-600">
+                <span className="font-medium text-marine-blue hover:text-marine-dark">
+                  {file ? file.name : 'Upload flight ticket'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".pdf,image/*"
+              onChange={handleFileChange}
+              className="sr-only"
+              disabled={uploading}
+            />
+          </label>
+        </div>
+        
+        {file && (
+          <div className="flex flex-col space-y-2">
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className={`px-3 py-2 text-sm rounded-md text-white ${
+                uploading 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-marine-blue hover:bg-marine-dark'
+              }`}
+            >
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+            <button
+              onClick={handleRemove}
+              disabled={uploading}
+              className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {!file && (
+        <p className="text-xs text-gray-500">
+          Upload flight ticket for this surveyor. This will be visible in the surveyor's dashboard.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Flight Ticket Upload Component
+function FlightTicketUpload({ bookingId, onUploadSuccess }) {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+
+    // Validate file size (10MB max)
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    if (selectedFile.size > maxFileSize) {
+      setError('File size exceeds 10MB limit');
+      setFile(null);
+      return;
+    }
+
+    // Validate file type (images and PDFs allowed)
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(selectedFile.type.toLowerCase())) {
+      setError('Invalid file type. Only images and PDF files are allowed.');
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+    setError('');
+  };
+
+  const handleUpload = async () => {
+    if (!file || !bookingId) return;
+
+    try {
+      setUploading(true);
+      setError('');
+      
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const fileData = {
+            name: file.name,
+            data: reader.result
+          };
+
+          // Send to backend
+          const token = localStorage.getItem('token');
+          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+          
+          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
+            flightTicket: fileData
+          }, config);
+          
+          setSuccess('Flight ticket uploaded successfully!');
+          setFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          
+          // Call success callback to refresh data
+          if (onUploadSuccess) {
+            setTimeout(() => {
+              onUploadSuccess();
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('Error uploading flight ticket:', err);
+          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error processing file:', err);
+      setError('Failed to process file');
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = () => {
+    setFile(null);
+    setError('');
+    setSuccess('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+          {error}
+        </div>
+      )}
+      
+      {success && (
+        <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+          {success}
+        </div>
+      )}
+      
+      <div className="flex items-start space-x-3">
+        <div className="flex-1">
+          <label className="flex justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-md hover:border-marine-blue transition-colors cursor-pointer">
+            <div className="space-y-1 text-center">
+              <svg
+                className="mx-auto h-8 w-8 text-gray-400"
+                stroke="currentColor"
+                fill="none"
+                viewBox="0 0 48 48"
+              >
+                <path
+                  d="M8 14v20c0 4.418 7.163 8 16 8 1.381 0 2.721-.087 4-.252M8 14c0 4.418 7.163 8 16 8s16-3.582 16-8M8 14c0-4.418 7.163-8 16-8s16 3.582 16 8m0 0v14m0-4c0 4.418-7.163 8-16 8S8 28.418 8 24m32 10v6m0 0v6m0-6h6m-6 0h-6"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div className="text-sm text-gray-600">
+                <span className="font-medium text-marine-blue hover:text-marine-dark">
+                  {file ? file.name : 'Upload flight ticket'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".pdf,image/*"
+              onChange={handleFileChange}
+              className="sr-only"
+              disabled={uploading}
+            />
+          </label>
+        </div>
+        
+        {file && (
+          <div className="flex flex-col space-y-2">
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className={`px-3 py-2 text-sm rounded-md text-white ${
+                uploading 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-marine-blue hover:bg-marine-dark'
+              }`}
+            >
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+            <button
+              onClick={handleRemove}
+              disabled={uploading}
+              className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {!file && (
+        <p className="text-xs text-gray-500">
+          Upload flight ticket for this surveyor. This will be visible in the surveyor's dashboard.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Vessel Modal Component
+function VesselModal({ vessel, onSave, onClose }) {
+  const [name, setName] = useState(vessel?.name || '');
+  const [imo, setIMO] = useState(vessel?.imo || '');
+  const [vesselType, setVesselType] = useState(vessel?.vesselType || '');
+  const [flag, setFlag] = useState(vessel?.flag || '');
+  const [yearBuilt, setYearBuilt] = useState(vessel?.yearBuilt || '');
+  const [grossTonnage, setGrossTonnage] = useState(vessel?.grossTonnage || '');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!name || !imo || !vesselType || !flag || !yearBuilt || !grossTonnage) {
+      setError('All fields are required');
+      return;
+    }
+
+    const vesselData = {
+      name,
+      imo,
+      vesselType,
+      flag,
+      yearBuilt,
+      grossTonnage
+    };
+
+    try {
+      if (vessel) {
+        await axios.put(`/api/vessels/${vessel._id}`, vesselData);
+      } else {
+        await axios.post('/api/vessels', vesselData);
+      }
+      onSave();
+      onClose();
+    } catch (err) {
+      console.error('Error saving vessel:', err);
+      setError('Failed to save vessel');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl">
+        <h2 className="text-lg font-semibold mb-4">
+          {vessel ? 'Edit Vessel' : 'Add New Vessel'}
+        </h2>
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Ship Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">IMO Number</label>
+              <input
+                type="text"
+                value={imo}
+                onChange={(e) => setIMO(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Vessel Type</label>
+              <input
+                type="text"
+                value={vesselType}
+                onChange={(e) => setVesselType(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Flag</label>
+              <input
+                type="text"
+                value={flag}
+                onChange={(e) => setFlag(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Year Built</label>
+              <input
+                type="number"
+                value={yearBuilt}
+                onChange={(e) => setYearBuilt(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Gross Tonnage</label>
+              <input
+                type="number"
+                value={grossTonnage}
+                onChange={(e) => setGrossTonnage(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
+                required
+              />
+            </div>
+          </div>
+          {error && (
+            <div className="mt-4 text-sm text-red-600 bg-red-50 p-2 rounded">
+              {error}
+            </div>
+          )}
+          <div className="mt-6 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm font-medium text-white bg-marine-blue hover:bg-marine-dark rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo Manager</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voyage</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {cargoManagerBookings
+                      .filter(booking => ['Pending', 'Accepted', 'Declined'].includes(booking.status))
+                      .map((booking) => (
+                      <tr key={booking._id} onClick={() => setDetailsModal({ open: true, type: 'cargo', booking })} className="cursor-pointer hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-8 w-8">
+                              <div className="h-8 w-8 rounded-full bg-marine-blue flex items-center justify-center">
+                                <span className="text-sm font-medium text-white">
+                                  {booking.cargoManager?.name?.charAt(0)?.toUpperCase() || 'C'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-3">
+                              <div className="text-sm font-medium text-gray-900">{booking.cargoManager?.name || 'Unknown'}</div>
+                              <div className="text-sm text-gray-500">{booking.vesselName}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{formatDate(booking.voyageDate)}</div>
+                          <div className="text-gray-500">{booking.departurePort} → {booking.destinationPort}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{booking.cargoType}</div>
+                          {booking.cargoWeight && (
+                            <div className="text-gray-500">{booking.cargoWeight} MT</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                              booking.status === 'Accepted' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {booking.status}
+                            </span>
+                            {booking.status === 'Accepted' && booking.acceptedAt && (
+                              <span className="text-xs text-gray-500 mt-1">
+                                Accepted {new Date(booking.acceptedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {booking.status === 'Declined' && booking.declinedAt && (
+                              <span className="text-xs text-gray-500 mt-1">
+                                Declined {new Date(booking.declinedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditCargoManagerBooking(booking);
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCargoManagerBooking(booking._id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete booking"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          {/* Assignment functionality removed as per requirements */}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+          </>
+        )}
+
+        {/* Maintenance Section */}
+        {activeSection === 'maintenance' && (
+          <>
+            {/* Maintenance Schedule */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Schedule</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">Upcoming and recent maintenance activities</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vessel</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maintenance Type</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled Date</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {maintenanceSchedule.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <p className="mt-2">No maintenance activities scheduled</p>
+                    </td>
+                  </tr>
+                ) : (
+                  maintenanceSchedule.map((maintenance) => (
+                  <tr key={maintenance.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{maintenance.vessel}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{maintenance.type}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{formatDate(maintenance.scheduled)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{maintenance.duration}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${maintenance.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                        {maintenance.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{maintenance.assignedTo}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button className="text-marine-blue hover:text-marine-dark mr-3">Edit</button>
+                      <button className="text-marine-blue hover:text-marine-dark">Details</button>
+                    </td>
+                  </tr>
+                ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Crew Assignments */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">Crew Assignments</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">Key personnel assignments and certification status</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vessel</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Certification</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {crewAssignments.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <p className="mt-2">No crew assignments found</p>
+                    </td>
+                  </tr>
+                ) : (
+                  crewAssignments.map((crew) => (
+                  <tr key={crew.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{crew.vessel}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{crew.position}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{crew.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{crew.certification}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{formatDate(crew.expiry)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button className="text-marine-blue hover:text-marine-dark mr-3">View Profile</button>
+                      <button className="text-marine-blue hover:text-marine-dark">Replace</button>
+                    </td>
+                  </tr>
+                ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
+            <button className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue">
+              Add Crew Member
+            </button>
+          </div>
+        </div>
+          </>
+        )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {/* Modals */}
+      {/* Vessel Modal */}
+      {(showAddModal || editingVessel) && (
+        <VesselModal
+          vessel={editingVessel}
+          onSave={editingVessel ? 
+            (data) => handleUpdateVessel(editingVessel._id, data) : 
+            handleAddVessel
+          }
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingVessel(null);
+          }}
+        />
+      )}
+
+      {/* Profile Modal */}
+      <UserProfileModal
+        open={showProfile}
+        onClose={() => setShowProfile(false)}
+        user={{
+          name: user?.name || 'Ship Manager',
+          email: user?.email || 'manager@example.com',
+          role: user?.role || 'manager',
+          status: user?.status || 'active',
+        }}
+        variant="sidebar"
+        title="My Profile"
+      />
+
+      {/* Surveyor Booking Modal */}
+      <SurveyorBookingModal
+        isOpen={showSurveyorBookingModal}
+        onClose={() => {
+          setShowSurveyorBookingModal(false);
+          setEditingSurveyorBooking(null);
+        }}
+        onSave={handleSurveyorBooking}
+        surveyors={surveyors}
+        vessels={vessels}
+        booking={editingSurveyorBooking}
+      />
+
+      {/* Details Modal */}
+      {detailsModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-2/3 lg:w-1/2 max-h-[80vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">
+                {detailsModal.type === 'surveyor' ? 'Surveyor Booking Details' : 'Cargo Manager Booking Details'}
+              </h3>
+              <button onClick={() => setDetailsModal({ open: false, type: null, booking: null })} className="text-gray-400 hover:text-gray-600">
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-3 text-sm">
+              {detailsModal.type === 'surveyor' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-gray-500">Surveyor</div>
+                    <div className="text-gray-900">{detailsModal.booking?.surveyor?.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Ship</div>
+                    <div className="text-gray-900">{detailsModal.booking?.vesselName}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Inspection Date</div>
+                    <div className="text-gray-900">{formatDate(detailsModal.booking?.inspectionDate)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Inspection Time</div>
+                    <div className="text-gray-900">{detailsModal.booking?.inspectionTime}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Ship Type</div>
+                    <div className="text-gray-900">{detailsModal.booking?.shipType}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Survey Type</div>
+                    <div className="text-gray-900">{detailsModal.booking?.surveyType}</div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <div className="text-gray-500">Location</div>
+                    <div className="text-gray-900">{detailsModal.booking?.location}</div>
+                  </div>
+                  {detailsModal.booking?.notes && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Notes</div>
+                      <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.notes}</div>
+                    </div>
+                  )}
+                  {detailsModal.booking?.specialRequirements && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Special Requirements</div>
+                      <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
+                    </div>
+                  )}
+                  {/* Flight Ticket Upload Section */}
+                  <div className="sm:col-span-2 mt-4 pt-4 border-t border-gray-200">
+                    <h4 className="text-md font-medium text-gray-900 mb-2">Flight Ticket</h4>
+                    {detailsModal.booking?.flightTicket ? (
+                      <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+                        <div className="flex items-center">
+                          <svg className="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-900">{detailsModal.booking.flightTicket.name}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = detailsModal.booking.flightTicket.data;
+                            link.download = detailsModal.booking.flightTicket.name;
+                            link.click();
+                          }}
+                          className="text-sm text-marine-blue hover:text-marine-dark font-medium"
+                        >
+                          Download
+                        </button>
+                      </div>
+                    ) : (
+                      <FlightTicketUpload 
+                        bookingId={detailsModal.booking?._id}
+                        onUploadSuccess={() => loadBookings()}
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-gray-500">Cargo Manager</div>
+                    <div className="text-gray-900">{detailsModal.booking?.cargoManager?.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Ship</div>
+                    <div className="text-gray-900">{detailsModal.booking?.vesselName}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Voyage Date</div>
+                    <div className="text-gray-900">{formatDate(detailsModal.booking?.voyageDate)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Voyage Time</div>
+                    <div className="text-gray-900">{detailsModal.booking?.voyageTime}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Departure Port</div>
+                    <div className="text-gray-900">{detailsModal.booking?.departurePort}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Destination Port</div>
+                    <div className="text-gray-900">{detailsModal.booking?.destinationPort}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Cargo Type</div>
+                    <div className="text-gray-900">{detailsModal.booking?.cargoType}</div>
+                  </div>
+                  {detailsModal.booking?.cargoWeight && (
+                    <div>
+                      <div className="text-gray-500">Cargo Weight</div>
+                      <div className="text-gray-900">{detailsModal.booking?.cargoWeight} MT</div>
+                    </div>
+                  )}
+                  {detailsModal.booking?.notes && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Notes</div>
+                      <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.notes}</div>
+                    </div>
+                  )}
+                  {detailsModal.booking?.specialRequirements && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Special Requirements</div>
+                      <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-between items-center">
+              <div className="flex space-x-2">
+                {/* Assignment functionality removed as per requirements */}
+              </div>
+              <button
+                onClick={() => setDetailsModal({ open: false, type: null, booking: null })}
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cargo Manager Booking Modal */}
+      <CargoManagerBookingModal
+        isOpen={showCargoManagerBookingModal}
+        onClose={() => {
+          setShowCargoManagerBookingModal(false);
+          setEditingCargoManagerBooking(null);
+        }}
+        onSave={handleCargoManagerBooking}
+        cargoManagers={cargoManagers}
+        vessels={vessels}
+        booking={editingCargoManagerBooking}
+      />
+
+      {/* Assignment modals removed as per requirements */}
+
+      {/* Service Request Details Modal */}
+      {serviceRequestDetailsModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-2/3 lg:w-1/2 max-h-[80vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Service Request Details</h3>
+              <button 
+                onClick={() => setServiceRequestDetailsModal({ open: false, request: null })} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm">
+              {serviceRequestDetailsModal.request && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Title</label>
+                    <p className="mt-1 text-sm text-gray-900">{serviceRequestDetailsModal.request.title}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Status</label>
+                    <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      serviceRequestDetailsModal.request.status === 'accepted' ? 'bg-green-100 text-green-800' : 
+                      serviceRequestDetailsModal.request.status === 'declined' ? 'bg-red-100 text-red-800' : 
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {serviceRequestDetailsModal.request.status}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Ship</label>
+                    <p className="mt-1 text-sm text-gray-900">{serviceRequestDetailsModal.request.vessel?.name || '-'}</p>
+                    {serviceRequestDetailsModal.request.vessel?.imo && (
+                      <p className="text-xs text-gray-500">IMO: {serviceRequestDetailsModal.request.vessel.imo}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</label>
+                    <p className="mt-1 text-sm text-gray-900">{serviceRequestDetailsModal.request.owner?.name || '-'}</p>
+                    <p className="text-xs text-gray-500">{serviceRequestDetailsModal.request.owner?.email || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Created</label>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {new Date(serviceRequestDetailsModal.request.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</label>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {new Date(serviceRequestDetailsModal.request.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  {serviceRequestDetailsModal.request.decisionBy && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Decision By</label>
+                        <p className="mt-1 text-sm text-gray-900">{serviceRequestDetailsModal.request.decisionBy?.name || '-'}</p>
+                        <p className="text-xs text-gray-500">{serviceRequestDetailsModal.request.decisionBy?.email || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Decision Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {serviceRequestDetailsModal.request.decisionAt ? 
+                            new Date(serviceRequestDetailsModal.request.decisionAt).toLocaleString() : '-'}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Description</label>
+                    <p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                      {serviceRequestDetailsModal.request.description}
+                    </p>
+                  </div>
+                  {serviceRequestDetailsModal.request.decisionNote && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Decision Note</label>
+                      <p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                        {serviceRequestDetailsModal.request.decisionNote}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-between items-center">
+              <div className="flex space-x-2">
+                {serviceRequestDetailsModal.request?.status === 'pending' && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        actOnRequest(serviceRequestDetailsModal.request._id, 'accept');
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        actOnRequest(serviceRequestDetailsModal.request._id, 'decline');
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                    >
+                      Decline
+                    </button>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={() => setServiceRequestDetailsModal({ open: false, request: null })}
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}
+
+// Vessel Modal Component
+function VesselModal({ vessel, onSave, onClose }) {
+  const [formData, setFormData] = useState({
+    name: vessel?.name || '',
+    imo: vessel?.imo || '',
+    vesselType: vessel?.vesselType || 'Container Ship',
+    flag: vessel?.flag || '',
+    yearBuilt: vessel?.yearBuilt || '',
+    grossTonnage: vessel?.grossTonnage || '',
+    dimensions: {
+      length: vessel?.dimensions?.length || '',
+      beam: vessel?.dimensions?.beam || '',
+      draft: vessel?.dimensions?.draft || ''
+    }
+  });
+
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  const vesselTypes = [
+    'Bulk Carrier',
+    'Container Ship', 
+    'Tanker',
+    'Passenger Ship',
+    'Fishing Vessel',
+    'Other'
+  ];
+
+  const validateField = (name, value) => {
+    let error = '';
+    
+    switch (name) {
+      case 'name':
+        if (!value.trim()) error = 'Ship name is required';
+        break;
+      case 'imo':
+        if (!value.trim()) error = 'IMO number is required';
+        else if (!/^IMO\s\d{7}$/.test(value)) error = 'Please enter a valid IMO number (format: IMO 1234567)';
+        break;
+      case 'vesselType':
+        if (!value) error = 'Ship type is required';
+        break;
+      case 'flag':
+        if (!value.trim()) error = 'Flag country is required';
+        break;
+      case 'yearBuilt':
+        if (!value) error = 'Year built is required';
+        else if (value < 1900 || value > new Date().getFullYear()) error = 'Please enter a valid year';
+        break;
+      case 'grossTonnage':
+        if (!value || value <= 0) error = 'Gross tonnage must be positive';
+        break;
+    }
+    
+    setErrors(prev => ({ ...prev, [name]: error }));
+    return !error;
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (touched[name]) validateField(name, value);
+  };
+
+  const handleDimensionChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      dimensions: { ...prev.dimensions, [name]: value }
+    }));
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    validateField(name, value);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Mark all fields as touched
+    const allTouched = {};
+    Object.keys(formData).forEach(key => {
+      if (key !== 'dimensions') allTouched[key] = true;
+    });
+    setTouched(allTouched);
+
+    // Validate all fields
+    const isValid = Object.keys(formData).every(key => {
+      if (key === 'dimensions') return true;
+      return validateField(key, formData[key]);
+    });
+
+    if (isValid) {
+      onSave(formData);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+        <div className="mt-3">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              {vessel ? 'Edit Ship' : 'Add New Ship'}
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Ship Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.name && errors.name 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                />
+                {touched.name && errors.name && (
+                  <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">IMO Number *</label>
+                <input
+                  type="text"
+                  name="imo"
+                  value={formData.imo}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  placeholder="IMO 1234567"
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.imo && errors.imo 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                />
+                {touched.imo && errors.imo && (
+                  <p className="mt-1 text-sm text-red-600">{errors.imo}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Ship Type *</label>
+                <select
+                  name="vesselType"
+                  value={formData.vesselType}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.vesselType && errors.vesselType 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                >
+                  {vesselTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                {touched.vesselType && errors.vesselType && (
+                  <p className="mt-1 text-sm text-red-600">{errors.vesselType}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Flag Country *</label>
+                <input
+                  type="text"
+                  name="flag"
+                  value={formData.flag}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.flag && errors.flag 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                />
+                {touched.flag && errors.flag && (
+                  <p className="mt-1 text-sm text-red-600">{errors.flag}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Year Built *</label>
+                <input
+                  type="number"
+                  name="yearBuilt"
+                  value={formData.yearBuilt}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.yearBuilt && errors.yearBuilt 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                />
+                {touched.yearBuilt && errors.yearBuilt && (
+                  <p className="mt-1 text-sm text-red-600">{errors.yearBuilt}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Gross Tonnage *</label>
+                <input
+                  type="number"
+                  name="grossTonnage"
+                  value={formData.grossTonnage}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  min="1"
+                  required
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                    touched.grossTonnage && errors.grossTonnage 
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300'
+                  }`}
+                />
+                {touched.grossTonnage && errors.grossTonnage && (
+                  <p className="mt-1 text-sm text-red-600">{errors.grossTonnage}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Length (m)</label>
+                <input
+                  type="number"
+                  name="length"
+                  value={formData.dimensions.length}
+                  onChange={handleDimensionChange}
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Beam (m)</label>
+                <input
+                  type="number"
+                  name="beam"
+                  value={formData.dimensions.beam}
+                  onChange={handleDimensionChange}
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Draft (m)</label>
+                <input
+                  type="number"
+                  name="draft"
+                  value={formData.dimensions.draft}
+                  onChange={handleDimensionChange}
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+              >
+                {vessel ? 'Update Ship' : 'Add Ship'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}

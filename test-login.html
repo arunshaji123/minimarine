@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a8b; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Marine Survey Login Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Backend Server Test</h3>
+        <button onclick="testBackend()">Test Backend Connection</button>
+        <div id="backend-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Login Test (Mock Users)</h3>
+        <button onclick="testLogin('owner@example.com', 'password')">Test Owner Login</button>
+        <button onclick="testLogin('admin@example.com', 'password')">Test Admin Login</button>
+        <button onclick="testLogin('ship@example.com', 'password')">Test Ship Management Login</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Google Sign-In Test</h3>
+        <button onclick="testGoogleAuth()">Test Google Sign-In</button>
+        <div id="google-result"></div>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const logDiv = document.createElement('div');
+            logDiv.className = `test-section ${type}`;
+            logDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(logDiv);
+            console.log(`[TEST] ${message}`);
+        }
+
+        async function testBackend() {
+            try {
+                const response = await fetch('http://localhost:5000');
+                const data = await response.json();
+                document.getElementById('backend-result').innerHTML = 
+                    `<div class="success">✅ Backend is running: ${data.message}</div>`;
+                log('Backend test passed', 'success');
+            } catch (error) {
+                document.getElementById('backend-result').innerHTML = 
+                    `<div class="error">❌ Backend connection failed: ${error.message}</div>`;
+                log('Backend test failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testLogin(email, password) {
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('login-result').innerHTML = 
+                        `<div class="success">✅ Login successful for ${email}. Role: ${data.user.role}</div>`;
+                    log(`Login successful for ${email}. Role: ${data.user.role}`, 'success');
+                } else {
+                    document.getElementById('login-result').innerHTML = 
+                        `<div class="error">❌ Login failed for ${email}: ${data.message}</div>`;
+                    log(`Login failed for ${email}: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('login-result').innerHTML = 
+                    `<div class="error">❌ Login request failed for ${email}: ${error.message}</div>`;
+                log(`Login request failed for ${email}: ${error.message}`, 'error');
+            }
+        }
+
+        function testGoogleAuth() {
+            log('Opening Google Sign-In test page...', 'info');
+            window.open('http://localhost:3000/login', '_blank');
+        }
+
+        // Auto-test backend on page load
+        window.addEventListener('load', function() {
+            log('Login test page loaded', 'info');
+            testBackend();
+        });
+    </script>
+</body>
+</html>
+
+
+
