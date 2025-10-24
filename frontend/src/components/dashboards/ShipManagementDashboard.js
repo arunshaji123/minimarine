@@ -53,7 +53,7 @@ export default function ShipManagementDashboard() {
   const loadServiceRequests = async () => {
     try {
       setSrLoading(true);
-      const res = await axios.get('/service-requests'); // role-aware: ship_management sees assigned ones
+      const res = await axios.get('/api/service-requests'); // role-aware: ship_management sees assigned ones
       setServiceRequests(res.data?.requests || []);
     } catch (e) {
       console.error('Failed to load service requests', e);
@@ -65,7 +65,7 @@ export default function ShipManagementDashboard() {
 
   const actOnRequest = async (id, action, note) => {
     try {
-      const url = `/service-requests/${id}/${action}`; // action: accept | decline
+      const url = `/api/service-requests/${id}/${action}`; // action: accept | decline
       await axios.post(url, note ? { note } : {});
       await loadServiceRequests();
       setSuccessMessage(`Request ${action}ed`);
@@ -95,7 +95,7 @@ export default function ShipManagementDashboard() {
     try {
       setLoading(true);
       console.log('Loading vessels...');
-      const response = await axios.get('/vessels');
+      const response = await axios.get('/api/vessels');
       console.log('Vessels loaded:', response.data.length, 'vessels');
       console.log('Vessels data:', response.data);
       setVessels(response.data);
@@ -114,9 +114,9 @@ export default function ShipManagementDashboard() {
       
       // Load cargo managers and surveyors in parallel
       const [cargoManagersRes, surveyorsRes, statsRes] = await Promise.all([
-        axios.get('/user-management/cargo-managers'),
-        axios.get('/user-management/surveyors'),
-        axios.get('/user-management/stats')
+        axios.get('/api/user-management/cargo-managers'),
+        axios.get('/api/user-management/surveyors'),
+        axios.get('/api/user-management/stats')
       ]);
       
       setCargoManagers(cargoManagersRes.data);
@@ -143,8 +143,8 @@ export default function ShipManagementDashboard() {
 
       // Load surveyor and cargo manager bookings in parallel
       const [surveyorBookingsRes, cargoManagerBookingsRes] = await Promise.all([
-        axios.get('/surveyor-bookings'),
-        axios.get('/cargo-manager-bookings')
+        axios.get('/api/surveyor-bookings'),
+        axios.get('/api/cargo-manager-bookings')
       ]);
       
       setSurveyorBookings(surveyorBookingsRes.data);
@@ -170,12 +170,12 @@ export default function ShipManagementDashboard() {
       let response;
       if (editingSurveyorBooking) {
         console.log('Updating surveyor booking:', bookingData);
-        response = await axios.put(`/surveyor-bookings/${editingSurveyorBooking._id}`, bookingData, config);
+        response = await axios.put(`/api/surveyor-bookings/${editingSurveyorBooking._id}`, bookingData, config);
         console.log('Surveyor booking updated successfully:', response.data);
         setSuccessMessage('Surveyor booking updated successfully!');
       } else {
         console.log('Creating surveyor booking:', bookingData);
-        response = await axios.post('/surveyor-bookings', bookingData, config);
+        response = await axios.post('/api/surveyor-bookings', bookingData, config);
         console.log('Surveyor booking created successfully:', response.data);
         setSuccessMessage('Surveyor booking created successfully!');
       }
@@ -232,7 +232,7 @@ export default function ShipManagementDashboard() {
         setSuccessMessage('Cargo manager booking updated successfully!');
       } else {
         console.log('Creating cargo manager booking:', bookingData);
-        response = await axios.post('/cargo-manager-bookings', bookingData, config);
+        response = await axios.post('/api/cargo-manager-bookings', bookingData, config);
         console.log('Cargo manager booking created successfully:', response.data);
         setSuccessMessage('Cargo manager booking created successfully!');
       }
@@ -279,7 +279,7 @@ export default function ShipManagementDashboard() {
   const handleAddVessel = async (vesselData) => {
     try {
       console.log('Submitting vessel data:', vesselData);
-      const response = await axios.post('/vessels', vesselData);
+      const response = await axios.post('/api/vessels', vesselData);
       console.log('Vessel created successfully:', response.data);
       
       // Add the new vessel to the state

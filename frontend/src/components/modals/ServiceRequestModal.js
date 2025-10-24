@@ -20,7 +20,7 @@ export default function ServiceRequestModal({ open, onClose, onCreated, onUpdate
         setVessels(ownerVessels || []);
         // Load active/logged-in ship management companies for dropdown
         try {
-          const res = await axios.get('/user-management/ship-management-companies');
+          const res = await axios.get('/api/user-management/ship-management-companies');
           const companies = res.data?.companies || [];
           setShipCompanies(companies);
         } catch (e) {
@@ -75,12 +75,12 @@ export default function ServiceRequestModal({ open, onClose, onCreated, onUpdate
       
       if (editingRequest) {
         // Update existing request
-        const res = await axios.put(`/service-requests/${editingRequest._id}`, payload);
+        const res = await axios.put(`/api/service-requests/${editingRequest._id}`, payload);
         console.log('Service request updated successfully:', res.data);
         onUpdated?.(res.data.request);
       } else {
         // Create new request
-        const res = await axios.post('/service-requests', payload);
+        const res = await axios.post('/api/service-requests', payload);
         console.log('Service request created successfully:', res.data);
         onCreated?.(res.data.request);
       }

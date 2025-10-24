@@ -46,7 +46,7 @@ export default function CargoManagerDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get('/messages/users', { params: { role: 'ship_management' } });
+        const res = await axios.get('/api/messages/users', { params: { role: 'ship_management' } });
         const users = res.data.users || [];
         setShipMgmtUsers(users);
       } catch (e) {}
@@ -94,7 +94,7 @@ export default function CargoManagerDashboard() {
     try {
       setLoading(true);
       console.log('Loading cargo shipments from cargooshipment collection...');
-      const response = await axios.get('/cargo');
+      const response = await axios.get('/api/cargo');
       console.log('Cargo shipments loaded:', response.data.length, 'shipments');
       console.log('Cargo shipments data:', JSON.stringify(response.data, null, 2));
       setActiveCargo(response.data);
@@ -152,7 +152,7 @@ export default function CargoManagerDashboard() {
     try {
       setVesselsLoading(true);
       console.log('Loading vessels...');
-      const response = await axios.get('/vessels');
+      const response = await axios.get('/api/vessels');
       console.log('Vessels loaded:', response.data);
       setVessels(response.data);
     } catch (err) {
@@ -180,7 +180,7 @@ export default function CargoManagerDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      const response = await axios.post('/cargo', cargoData, config);
+      const response = await axios.post('/api/cargo', cargoData, config);
 
       console.log('Cargo shipment created successfully:', response.data);
       
@@ -266,7 +266,7 @@ export default function CargoManagerDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      const response = await axios.get('/cargo-manager-bookings', config);
+      const response = await axios.get('/api/cargo-manager-bookings', config);
       setBookings(response.data);
       
       console.log('Cargo manager bookings loaded:', response.data.length, 'bookings');

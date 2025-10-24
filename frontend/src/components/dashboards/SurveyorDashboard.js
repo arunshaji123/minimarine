@@ -50,7 +50,7 @@ export default function SurveyorDashboard() {
     // Fetch Ship Management users to chat with
     (async () => {
       try {
-        const res = await axios.get('/messages/users', { params: { role: 'ship_management' } });
+        const res = await axios.get('/api/messages/users', { params: { role: 'ship_management' } });
         const first = (res.data.users || [])[0];
         if (first) setShipMgmtUserId(first._id);
       } catch (e) {
@@ -71,7 +71,7 @@ export default function SurveyorDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      const response = await axios.get('/surveys/completed', config);
+      const response = await axios.get('/api/surveys/completed', config);
       
       // Transform the data to match what the Recent Reports table expects
       const reports = response.data.map(survey => ({
@@ -119,7 +119,7 @@ export default function SurveyorDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      const response = await axios.get('/surveyor-bookings', config);
+      const response = await axios.get('/api/surveyor-bookings', config);
       setBookings(response.data);
       
       console.log('Surveyor bookings loaded:', response.data.length, 'bookings');
@@ -136,7 +136,7 @@ export default function SurveyorDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      await axios.put(`/surveyor-bookings/${bookingId}/accept`, {}, config);
+      await axios.put(`/api/surveyor-bookings/${bookingId}/accept`, {}, config);
       setSuccessMessage('Booking accepted successfully!');
       loadBookings(); // Reload bookings
       
@@ -153,7 +153,7 @@ export default function SurveyorDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      await axios.put(`/surveyor-bookings/${bookingId}/decline`, {}, config);
+      await axios.put(`/api/surveyor-bookings/${bookingId}/decline`, {}, config);
       setSuccessMessage('Booking declined successfully!');
       loadBookings(); // Reload bookings
       

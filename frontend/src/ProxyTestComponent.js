@@ -11,7 +11,7 @@ const ProxyTestComponent = () => {
     
     try {
       console.log('Testing proxy with baseURL:', axios.defaults.baseURL);
-      const response = await axios.get('/auth/test');
+      const response = await axios.get('/api/auth/test');
       setResult(`Success: ${JSON.stringify(response.data, null, 2)}`);
     } catch (error) {
       console.error('Proxy test error:', error);

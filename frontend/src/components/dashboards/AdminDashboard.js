@@ -68,7 +68,7 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       setError('');
-      const res = await axios.get('/users');
+      const res = await axios.get('/api/users');
       setUsers(res.data.users || []);
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to load users');
@@ -122,7 +122,7 @@ export default function AdminDashboard() {
         const id = editingUser._id || editingUser.id;
         const payload = { name: form.name, email: form.email, role: form.role, status: form.status };
         if (form.password) payload.password = form.password; // optional
-        await axios.put(`/users/${id}`, payload);
+        await axios.put(`/api/users/${id}`, payload);
         setSuccess('User updated');
       } else {
         // Create
@@ -130,7 +130,7 @@ export default function AdminDashboard() {
           setError('Password must be at least 6 characters');
           return;
         }
-        await axios.post('/users', form);
+        await axios.post('/api/users', form);
         setSuccess('User created');
       }
       closeModal();
@@ -147,7 +147,7 @@ export default function AdminDashboard() {
     try {
       setError('');
       setSuccess('');
-      await axios.delete(`/users/${id}`);
+      await axios.delete(`/api/users/${id}`);
       setSuccess('User deleted');
       await fetchUsers();
     } catch (e) {

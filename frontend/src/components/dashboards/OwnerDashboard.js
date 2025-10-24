@@ -46,28 +46,28 @@ export default function OwnerDashboard() {
         setLoading(true);
         
         // Get owner's vessels
-        const vesselsRes = await axios.get('/vessels');
+        const vesselsRes = await axios.get('/api/vessels');
         setVessels(vesselsRes.data);
         setError(null);
         
         // Get surveys for owner's vessels
-        const surveysRes = await axios.get('/surveys');
+        const surveysRes = await axios.get('/api/surveys');
         setSurveys(surveysRes.data);
         
         // Get maintenance records for owner's vessels
-        const maintenanceRes = await axios.get('/maintenance');
+        const maintenanceRes = await axios.get('/api/maintenance');
         setMaintenance(maintenanceRes.data);
         
         // Get crew for owner's vessels
-        const crewRes = await axios.get('/crew');
+        const crewRes = await axios.get('/api/crew');
         setCrew(crewRes.data);
         
         // Get cargo for owner's vessels
-        const cargoRes = await axios.get('/cargo');
+        const cargoRes = await axios.get('/api/cargo');
         setCargo(cargoRes.data);
 
         // Load my service requests
-        const srRes = await axios.get('/service-requests');
+        const srRes = await axios.get('/api/service-requests');
         setServiceRequests(srRes.data?.requests || []);
         
         setLoading(false);
@@ -137,7 +137,7 @@ export default function OwnerDashboard() {
 
   const handleAddVessel = async (vesselData) => {
     try {
-      const res = await axios.post('/vessels', vesselData);
+      const res = await axios.post('/api/vessels', vesselData);
       setVessels(prev => [res.data, ...prev]);
       setShowVesselModal(false);
       setEditingVessel(null);
@@ -152,7 +152,7 @@ export default function OwnerDashboard() {
 
   const handleUpdateVessel = async (id, vesselData) => {
     try {
-      const res = await axios.put(`/vessels/${id}`, vesselData);
+      const res = await axios.put(`/api/vessels/${id}`, vesselData);
       setVessels(prev => prev.map(v => v._id === id ? res.data : v));
       setShowVesselModal(false);
       setEditingVessel(null);
@@ -175,7 +175,7 @@ export default function OwnerDashboard() {
     }
     
     try {
-      await axios.delete(`/service-requests/${requestId}`);
+      await axios.delete(`/api/service-requests/${requestId}`);
       setServiceRequests(prev => prev.filter(r => r._id !== requestId));
       setSuccessMessage('Service request deleted successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -320,7 +320,7 @@ export default function OwnerDashboard() {
                 <button
                   onClick={async () => {
                     try {
-                      const r = await axios.get('/service-requests');
+                      const r = await axios.get('/api/service-requests');
                       setServiceRequests(r.data?.requests || []);
                     } catch (e) {
                       console.error(e);
@@ -586,7 +586,7 @@ export default function OwnerDashboard() {
                       onClick={async () => {
                         if (window.confirm('Are you sure you want to delete this vessel?')) {
                           try {
-                            await axios.delete(`/vessels/${vessel._id}`);
+                            await axios.delete(`/api/vessels/${vessel._id}`);
                             setVessels(prev => prev.filter(v => v._id !== vessel._id));
                           } catch (err) {
                             console.error('Error deleting vessel:', err);
@@ -1017,7 +1017,7 @@ function VesselModal({ vessel, onSave, onClose }) {
   useEffect(() => {
     const loadCompanies = async () => {
       try {
-        const res = await axios.get('/users');
+        const res = await axios.get('/api/users');
         const companies = (res.data?.users || res.data || []).filter(u => u.role === 'ship_management');
         setShipCompanies(companies);
       } catch (e) {
