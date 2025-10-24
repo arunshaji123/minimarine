@@ -100,15 +100,6 @@ app.use('/api/surveyor-bookings', require('./routes/surveyor-bookings'));
 app.use('/api/cargo-manager-bookings', require('./routes/cargo-manager-bookings'));
 app.use('/api/service-requests', require('./routes/service-requests'));
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../frontend/build', 'index.html'));
-  });
-}
-
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {
   console.log('❌ MONGODB_URI environment variable not set!');

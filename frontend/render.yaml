@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: static
     name: marine-survey-frontend
     env: static
     buildCommand: npm install && npm run build
