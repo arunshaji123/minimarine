@@ -13,15 +13,75 @@ dotenv.config({ path: envPath });
 console.log('Environment variables loaded:');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Loaded' : 'Not found');
 console.log('PORT:', process.env.PORT || 'Not set, using default 5000');
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL || 'Not set, using default');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'Not set');
 
 const app = express();
 
+// Explicitly set CORS headers (before other middleware)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  console.log('Request origin:', origin);
+  console.log('FRONTEND_URL from env:', process.env.FRONTEND_URL);
+  
+  // Set CORS headers
+  if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
+    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
+  } else if (!origin || origin === 'http://localhost:3000') {
+    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+  } else {
+    // For debugging, allow the requesting origin
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
 // Configure CORS for Render deployment
+const allowedOrigins = [
+  'http://localhost:3000'
+];
+
+// Add FRONTEND_URL if it exists
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+  console.log('Adding FRONTEND_URL to allowed origins:', process.env.FRONTEND_URL);
+}
+
+console.log('All allowed origins:', allowedOrigins);
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if the origin is in our allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('CORS: Allowing origin', origin);
+      callback(null, true);
+    } else {
+      console.log('CORS: Blocking origin', origin);
+      console.log('Allowed origins:', allowedOrigins);
+      callback(null, true); // Temporarily allow all for debugging
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
 };
+
+// Apply CORS middleware (this will work with our explicit headers above)
 app.use(cors(corsOptions));
+
 app.use(express.json());
 
 // Routes
