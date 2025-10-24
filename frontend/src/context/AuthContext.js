@@ -47,8 +47,8 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Real API call
-      console.log('AuthContext: Making API call to /auth/profile with baseURL:', axios.defaults.baseURL);
-      const response = await axios.get('/auth/profile');
+      console.log('AuthContext: Making API call to /api/auth/profile with baseURL:', axios.defaults.baseURL);
+      const response = await axios.get('/api/auth/profile');
       console.log('AuthContext: Profile response:', response.data);
       setUser(response.data.user);
       setLoading(false);
@@ -124,7 +124,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Real API call
-      const response = await axios.post('/auth/login', { email, password });
+      const response = await axios.post('/api/auth/login', { email, password });
       if (response.data.success) {
         const { token, user } = response.data;
         localStorage.setItem('token', token);
@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Real API call
-      const response = await axios.post('/auth/register', { name, email, password, role });
+      const response = await axios.post('/api/auth/register', { name, email, password, role });
       if (response.data.success) {
         // Don't set token or user - require explicit login
         return { success: true, message: response.data.message || 'Registration successful', user: response.data.user };
