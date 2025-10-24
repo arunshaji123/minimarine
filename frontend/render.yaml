@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: marine-survey-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production

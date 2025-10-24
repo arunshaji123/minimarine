@@ -16,14 +16,13 @@ console.log('PORT:', process.env.PORT || 'Not set, using default 5000');
 
 const app = express();
 
-// Middleware
-app.use(cors({
-  origin: 'http://localhost:3000',
+// Configure CORS for Render deployment
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
-}));
+};
+app.use(cors(corsOptions));
 app.use(express.json());
-
-// Chat system removed: Socket.IO fully removed
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -40,7 +39,15 @@ app.use('/api/user-management', require('./routes/user-management'));
 app.use('/api/surveyor-bookings', require('./routes/surveyor-bookings'));
 app.use('/api/cargo-manager-bookings', require('./routes/cargo-manager-bookings'));
 app.use('/api/service-requests', require('./routes/service-requests'));
-// Chat system removed: messages API disabled
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend/build', 'index.html'));
+  });
+}
 
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {
@@ -76,6 +83,6 @@ app.get('/api/test', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });

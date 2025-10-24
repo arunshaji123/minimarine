@@ -9,7 +9,8 @@ A full-stack web application for marine surveying services built with React, Nod
 - **Dashboard**: User dashboard with survey overview and statistics
 - **MongoDB Integration**: User data stored in MongoDB database
 - **JWT Authentication**: Secure token-based authentication
-- **Modern UI**: Ocean-themed design with gradient backgrounds
+- **bcryptjs**: For password hashing
+- **Express Validator**: For input validation
 
 ## Tech Stack
 
@@ -249,6 +250,55 @@ touch backend/routes/newRoute.js
 ```
 
 ## Production Deployment
+
+### Deploying to Render
+
+1. **Prepare Your Repository**
+   - Push your code to a GitHub repository
+   - Ensure all files are committed
+
+2. **Set up MongoDB Atlas**
+   - Create a MongoDB Atlas account
+   - Create a new cluster
+   - Get your connection string
+   - Note down the connection string for later use
+
+3. **Deploy Backend to Render**
+   - Go to https://dashboard.render.com
+   - Click "New" → "Web Service"
+   - Connect your GitHub repository
+   - Set the following:
+     - Name: `marine-survey-backend`
+     - Root Directory: `backend`
+     - Runtime: `Node`
+     - Build Command: `npm install`
+     - Start Command: `npm start`
+   - Add Environment Variables:
+     - `NODE_ENV`: `production`
+     - `MONGODB_URI`: `your_mongodb_atlas_connection_string`
+     - `JWT_SECRET`: `your_secure_random_string`
+     - `PORT`: `10000`
+     - `FRONTEND_URL`: `https://your-frontend-service.onrender.com`
+   - Click "Create Web Service"
+
+4. **Deploy Frontend to Render**
+   - Go to https://dashboard.render.com
+   - Click "New" → "Static Site"
+   - Connect your GitHub repository
+   - Set the following:
+     - Name: `marine-survey-frontend`
+     - Build Command: `npm install && npm run build`
+     - Publish Directory: `build`
+   - Add Environment Variables:
+     - `REACT_APP_API_URL`: `https://your-backend-service.onrender.com/api`
+   - Click "Create Static Site"
+
+5. **Update Environment Variables**
+   - Once your backend service is deployed, get its URL
+   - Update the `FRONTEND_URL` in your backend service with the frontend URL
+   - Update the `REACT_APP_API_URL` in your frontend service with the backend URL
+
+### Manual Deployment
 
 1. **Environment Variables**
    - Set secure JWT_SECRET
