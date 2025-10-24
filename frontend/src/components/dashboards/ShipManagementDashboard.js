@@ -45,6 +45,7 @@ export default function ShipManagementDashboard() {
   const [serviceRequests, setServiceRequests] = useState([]);
   const [srLoading, setSrLoading] = useState(false);
   const [serviceRequestDetailsModal, setServiceRequestDetailsModal] = useState({ open: false, request: null });
+  const [bookingFromServiceRequest, setBookingFromServiceRequest] = useState(null);
 
   // Navigation state
   const [activeSection, setActiveSection] = useState('overview');
@@ -1480,14 +1481,43 @@ export default function ShipManagementDashboard() {
         </div>
       )}
 
+      {/* Surveyor Booking Modal */}
+      <SurveyorBookingModal
+        isOpen={showSurveyorBookingModal}
+        onClose={() => {
+          setShowSurveyorBookingModal(false);
+          setEditingSurveyorBooking(null);
+          setBookingFromServiceRequest(null);
+        }}
+        onSave={(bookingData) => {
+          // If booking from service request, add reference to the service request
+          const finalBookingData = bookingFromServiceRequest 
+            ? { ...bookingData, serviceRequestId: bookingFromServiceRequest._id }
+            : bookingData;
+          handleSurveyorBooking(finalBookingData);
+          setBookingFromServiceRequest(null);
+        }}
+        surveyors={surveyors}
+        vessels={vessels}
+        booking={editingSurveyorBooking}
+      />
+
       {/* Cargo Manager Booking Modal */}
       <CargoManagerBookingModal
         isOpen={showCargoManagerBookingModal}
         onClose={() => {
           setShowCargoManagerBookingModal(false);
           setEditingCargoManagerBooking(null);
+          setBookingFromServiceRequest(null);
         }}
-        onSave={handleCargoManagerBooking}
+        onSave={(bookingData) => {
+          // If booking from service request, add reference to the service request
+          const finalBookingData = bookingFromServiceRequest 
+            ? { ...bookingData, serviceRequestId: bookingFromServiceRequest._id }
+            : bookingData;
+          handleCargoManagerBooking(finalBookingData);
+          setBookingFromServiceRequest(null);
+        }}
         cargoManagers={cargoManagers}
         vessels={vessels}
         booking={editingCargoManagerBooking}
@@ -1605,6 +1635,46 @@ export default function ShipManagementDashboard() {
                       className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
                     >
                       Decline
+                    </button>
+                  </>
+                )}
+                {serviceRequestDetailsModal.request?.status === 'accepted' && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Set up surveyor booking with data from service request
+                        setBookingFromServiceRequest(serviceRequestDetailsModal.request);
+                        const vessel = serviceRequestDetailsModal.request.vessel;
+                        setEditingSurveyorBooking({
+                          vesselId: vessel?._id,
+                          vesselName: vessel?.name,
+                          // You can pre-fill other fields as needed
+                        });
+                        setShowSurveyorBookingModal(true);
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    >
+                      Book Surveyor
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Set up cargo manager booking with data from service request
+                        setBookingFromServiceRequest(serviceRequestDetailsModal.request);
+                        const vessel = serviceRequestDetailsModal.request.vessel;
+                        setEditingCargoManagerBooking({
+                          vesselId: vessel?._id,
+                          vesselName: vessel?.name,
+                          // You can pre-fill other fields as needed
+                        });
+                        setShowCargoManagerBookingModal(true);
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700"
+                    >
+                      Book Cargo Manager
                     </button>
                   </>
                 )}
