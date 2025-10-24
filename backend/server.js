@@ -72,7 +72,7 @@ const corsOptions = {
     } else {
       console.log('CORS: Blocking origin', origin);
       console.log('Allowed origins:', allowedOrigins);
-      callback(null, true); // Temporarily allow all for debugging
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
