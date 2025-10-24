@@ -12,7 +12,6 @@ const SurveyorBookingModal = ({
     surveyorId: '',
     inspectionDate: '',
     inspectionTime: '',
-    shipType: '',
     surveyType: '',
     location: '',
     vesselId: '',
@@ -32,7 +31,6 @@ const SurveyorBookingModal = ({
           surveyorId: booking.surveyor?._id || '',
           inspectionDate: booking.inspectionDate ? new Date(booking.inspectionDate).toISOString().split('T')[0] : '',
           inspectionTime: booking.inspectionTime || '',
-          shipType: booking.shipType || '',
           surveyType: booking.surveyType || '',
           location: booking.location || '',
           vesselId: booking.vesselId || (booking.vessel ? booking.vessel._id : ''),
@@ -46,7 +44,6 @@ const SurveyorBookingModal = ({
           surveyorId: '',
           inspectionDate: '',
           inspectionTime: '',
-          shipType: '',
           surveyType: '',
           location: '',
           vesselId: '',
@@ -105,9 +102,6 @@ const SurveyorBookingModal = ({
         break;
       case 'inspectionTime':
         if (!value) error = 'Inspection time is required';
-        break;
-      case 'shipType':
-        if (!value) error = 'Ship type is required';
         break;
       case 'surveyType':
         if (!value) error = 'Survey type is required';
@@ -226,29 +220,6 @@ const SurveyorBookingModal = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Ship Type *</label>
-                <select
-                  name="shipType"
-                  value={formData.shipType}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 ${
-                    touched.shipType && errors.shipType ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">Select ship type...</option>
-                  <option value="Container">Container</option>
-                  <option value="Bulk Carrier">Bulk Carrier</option>
-                  <option value="Tanker">Tanker</option>
-                  <option value="Cargo Ship">Cargo Ship</option>
-                  <option value="Passenger Ship">Passenger Ship</option>
-                  <option value="Other">Other</option>
-                </select>
-                {touched.shipType && errors.shipType && (
-                  <p className="mt-1 text-sm text-red-600">{errors.shipType}</p>
-                )}
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700">Survey Type *</label>
                 <select
                   name="surveyType"
@@ -270,9 +241,6 @@ const SurveyorBookingModal = ({
                   <p className="mt-1 text-sm text-red-600">{errors.surveyType}</p>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Location *</label>
                 <input
@@ -290,6 +258,9 @@ const SurveyorBookingModal = ({
                   <p className="mt-1 text-sm text-red-600">{errors.location}</p>
                 )}
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Ship *</label>
                 <select
