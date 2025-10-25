@@ -7,7 +7,9 @@ const CargoManagerBookingModal = ({
   onSave, 
   cargoManagers = [], 
   vessels = [],
-  booking = null // Add booking prop for editing
+  booking = null, // Add booking prop for editing
+  fromServiceRequest = false,
+  serviceRequestVessel = null
 }) => {
   const [formData, setFormData] = useState({
     cargoManagerId: '',
@@ -47,6 +49,23 @@ const CargoManagerBookingModal = ({
           cargoWeight: booking.cargoWeight || '',
           cargoUnits: booking.cargoUnits || ''
         });
+      } else if (fromServiceRequest && serviceRequestVessel) {
+        // Pre-fill with service request vessel data
+        setFormData({
+          cargoManagerId: '',
+          voyageDate: '',
+          voyageTime: '',
+          cargoType: '',
+          departurePort: '',
+          destinationPort: '',
+          vesselId: serviceRequestVessel._id,
+          vesselName: serviceRequestVessel.name,
+          notes: '',
+          specialRequirements: '',
+          estimatedDuration: 7,
+          cargoWeight: '',
+          cargoUnits: ''
+        });
       } else {
         // Reset form for new booking
         setFormData({
@@ -68,7 +87,7 @@ const CargoManagerBookingModal = ({
       setErrors({});
       setTouched({});
     }
-  }, [isOpen]);
+  }, [isOpen, booking, fromServiceRequest, serviceRequestVessel]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -126,7 +145,7 @@ const CargoManagerBookingModal = ({
         if (!value) error = 'Destination port is required';
         break;
       case 'vesselId':
-        if (!value) error = 'Please select a ship';
+        if (!fromServiceRequest && !value) error = 'Please select a ship';
         break;
       default:
         break;
@@ -165,7 +184,11 @@ const CargoManagerBookingModal = ({
       <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
         <div className="mt-3">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Book Cargo Manager</h3>
+            <h3 className="text-lg font-medium text-gray-900">
+              {fromServiceRequest 
+                ? `Booking Cargo Manager for ${serviceRequestVessel?.name || 'Ship'}` 
+                : 'Book Cargo Manager'}
+            </h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
@@ -263,40 +286,56 @@ const CargoManagerBookingModal = ({
                   <p className="mt-1 text-sm text-red-600">{errors.cargoType}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Ship *</label>
-                <select
-                  name="vesselId"
-                  value={formData.vesselId || ''}
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    if (!selectedId) {
-                      setFormData(prev => ({ ...prev, vesselId: '', vesselName: '' }));
-                    } else {
-                      const v = vessels.find(v => String(v._id) === String(selectedId));
-                      setFormData(prev => ({ ...prev, vesselId: selectedId, vesselName: v ? v.name : '' }));
-                    }
-                    if (errors.vesselId) {
-                      setErrors(prev => ({ ...prev, vesselId: '' }));
-                    }
-                  }}
-                  onBlur={handleBlur}
-                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
-                    touched.vesselId && errors.vesselId ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">Select a ship...</option>
-                  {vessels.map(vessel => (
-                    <option key={vessel._id} value={vessel._id}>
-                      {vessel.name} ({vessel.imo})
-                    </option>
-                  ))}
-                </select>
-                {touched.vesselId && errors.vesselId && (
-                  <p className="mt-1 text-sm text-red-600">{errors.vesselId}</p>
-                )}
-              </div>
+              {!fromServiceRequest && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Ship *</label>
+                  <select
+                    name="vesselId"
+                    value={formData.vesselId || ''}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      if (!selectedId) {
+                        setFormData(prev => ({ ...prev, vesselId: '', vesselName: '' }));
+                      } else {
+                        const v = vessels.find(v => String(v._id) === String(selectedId));
+                        setFormData(prev => ({ ...prev, vesselId: selectedId, vesselName: v ? v.name : '' }));
+                      }
+                      if (errors.vesselId) {
+                        setErrors(prev => ({ ...prev, vesselId: '' }));
+                      }
+                    }}
+                    onBlur={handleBlur}
+                    className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${
+                      touched.vesselId && errors.vesselId ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Select a ship...</option>
+                    {vessels.map(vessel => (
+                      <option key={vessel._id} value={vessel._id}>
+                        {vessel.name} ({vessel.imo})
+                      </option>
+                    ))}
+                  </select>
+                  {touched.vesselId && errors.vesselId && (
+                    <p className="mt-1 text-sm text-red-600">{errors.vesselId}</p>
+                  )}
+                </div>
+              )}
             </div>
+
+            {fromServiceRequest && serviceRequestVessel && (
+              <div className="bg-blue-50 p-4 rounded-md">
+                <div className="flex items-center">
+                  <svg className="h-5 w-5 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">Booking for Ship</p>
+                    <p className="text-sm text-blue-700">{serviceRequestVessel.name} ({serviceRequestVessel.imo})</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Ports */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

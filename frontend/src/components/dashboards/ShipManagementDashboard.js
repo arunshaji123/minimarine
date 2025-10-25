@@ -183,6 +183,7 @@ export default function ShipManagementDashboard() {
       
       setShowSurveyorBookingModal(false);
       setEditingSurveyorBooking(null);
+      setBookingFromServiceRequest(null);
       loadBookings(); // Reload bookings
       
       // Clear success message after 3 seconds
@@ -228,7 +229,7 @@ export default function ShipManagementDashboard() {
       let response;
       if (editingCargoManagerBooking) {
         console.log('Updating cargo manager booking:', bookingData);
-        response = await axios.put(`/cargo-manager-bookings/${editingCargoManagerBooking._id}`, bookingData, config);
+        response = await axios.put(`/api/cargo-manager-bookings/${editingCargoManagerBooking._id}`, bookingData, config);
         console.log('Cargo manager booking updated successfully:', response.data);
         setSuccessMessage('Cargo manager booking updated successfully!');
       } else {
@@ -240,7 +241,43 @@ export default function ShipManagementDashboard() {
       
       setShowCargoManagerBookingModal(false);
       setEditingCargoManagerBooking(null);
+      setBookingFromServiceRequest(null);
       loadBookings(); // Reload bookings
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving cargo manager booking:', err);
+      setError(`Failed to ${editingCargoManagerBooking ? 'update' : 'create'} cargo manager booking`);
+    }
+  };
+
+  const handleEditCargoManagerBooking = (booking) => {
+    setEditingCargoManagerBooking(booking);
+    setShowCargoManagerBookingModal(true);
+  };
+
+  const handleDeleteCargoManagerBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to delete this cargo manager booking?')) {
+      return;
+    }
+    
+    try {
+      setBookingsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/cargo-manager-bookings/${bookingId}`, config);
+      setSuccessMessage('Cargo manager booking deleted successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting cargo manager booking:', err);
+      setError('Failed to delete cargo manager booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -1500,6 +1537,8 @@ export default function ShipManagementDashboard() {
         surveyors={surveyors}
         vessels={vessels}
         booking={editingSurveyorBooking}
+        fromServiceRequest={!!bookingFromServiceRequest}
+        serviceRequestVessel={bookingFromServiceRequest?.vessel}
       />
 
       {/* Cargo Manager Booking Modal */}
@@ -1521,6 +1560,8 @@ export default function ShipManagementDashboard() {
         cargoManagers={cargoManagers}
         vessels={vessels}
         booking={editingCargoManagerBooking}
+        fromServiceRequest={!!bookingFromServiceRequest}
+        serviceRequestVessel={bookingFromServiceRequest?.vessel}
       />
 
       {/* Assignment modals removed as per requirements */}
@@ -1645,12 +1686,6 @@ export default function ShipManagementDashboard() {
                         e.stopPropagation();
                         // Set up surveyor booking with data from service request
                         setBookingFromServiceRequest(serviceRequestDetailsModal.request);
-                        const vessel = serviceRequestDetailsModal.request.vessel;
-                        setEditingSurveyorBooking({
-                          vesselId: vessel?._id,
-                          vesselName: vessel?.name,
-                          // You can pre-fill other fields as needed
-                        });
                         setShowSurveyorBookingModal(true);
                         setServiceRequestDetailsModal({ open: false, request: null });
                       }}
@@ -1663,12 +1698,6 @@ export default function ShipManagementDashboard() {
                         e.stopPropagation();
                         // Set up cargo manager booking with data from service request
                         setBookingFromServiceRequest(serviceRequestDetailsModal.request);
-                        const vessel = serviceRequestDetailsModal.request.vessel;
-                        setEditingCargoManagerBooking({
-                          vesselId: vessel?._id,
-                          vesselName: vessel?.name,
-                          // You can pre-fill other fields as needed
-                        });
                         setShowCargoManagerBookingModal(true);
                         setServiceRequestDetailsModal({ open: false, request: null });
                       }}
