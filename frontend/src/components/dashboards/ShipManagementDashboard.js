@@ -278,23 +278,47 @@ export default function ShipManagementDashboard() {
       setBookingsLoading(false);
     }
   };
-      
-      // Clear success message after 3 seconds
+
+  const handleAddVessel = async (vesselData) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      const response = await axios.post('/api/vessels', vesselData, config);
+      console.log('Vessel added successfully:', response.data);
+      setSuccessMessage('Vessel added successfully!');
+      setShowAddModal(false);
+      loadVessels();
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error saving cargo manager booking:', err);
-      setError(`Failed to ${editingCargoManagerBooking ? 'update' : 'create'} cargo manager booking`);
+      console.error('Error adding vessel:', err);
+      setError('Failed to add vessel');
     }
   };
 
-  const handleEditCargoManagerBooking = (booking) => {
-    setEditingCargoManagerBooking(booking);
-    setShowCargoManagerBookingModal(true);
+  const handleEditVessel = (vessel) => {
+    setEditingVessel(vessel);
+    setShowAddModal(true);
   };
 
-  const handleDeleteCargoManagerBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this cargo manager booking?')) {
+  const handleDeleteVessel = async (vesselId) => {
+    if (!window.confirm('Are you sure you want to delete this vessel?')) {
       return;
+    }
+    
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/vessels/${vesselId}`, config);
+      setSuccessMessage('Vessel deleted successfully!');
+      loadVessels();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting vessel:', err);
+      setError('Failed to delete vessel');
+    } finally {
+      setLoading(false);
     }
     
     try {
