@@ -281,65 +281,6 @@ export default function ShipManagementDashboard() {
 
   const handleAddVessel = async (vesselData) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      const response = await axios.post('/api/vessels', vesselData, config);
-      console.log('Vessel added successfully:', response.data);
-      setSuccessMessage('Vessel added successfully!');
-      setShowAddModal(false);
-      loadVessels();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error adding vessel:', err);
-      setError('Failed to add vessel');
-    }
-  };
-
-  const handleEditVessel = (vessel) => {
-    setEditingVessel(vessel);
-    setShowAddModal(true);
-  };
-
-  const handleDeleteVessel = async (vesselId) => {
-    if (!window.confirm('Are you sure you want to delete this vessel?')) {
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      
-      await axios.delete(`/vessels/${vesselId}`, config);
-      setSuccessMessage('Vessel deleted successfully!');
-      loadVessels();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error deleting vessel:', err);
-      setError('Failed to delete vessel');
-    } finally {
-      setLoading(false);
-    }
-    
-    try {
-      setBookingsLoading(true);
-      const token = localStorage.getItem('token');
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      
-      await axios.delete(`/cargo-manager-bookings/${bookingId}`, config);
-      setSuccessMessage('Cargo manager booking deleted successfully!');
-      loadBookings();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error deleting cargo manager booking:', err);
-      setError('Failed to delete cargo manager booking');
-    } finally {
-      setBookingsLoading(false);
-    }
-  };
-
-  const handleAddVessel = async (vesselData) => {
-    try {
       console.log('Submitting vessel data:', vesselData);
       const response = await axios.post('/api/vessels', vesselData);
       console.log('Vessel created successfully:', response.data);
