@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-
+import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import UserProfileModal from '../UserProfileModal.jsx';
 import SurveyorBookingModal from '../modals/SurveyorBookingModal';
 import CargoManagerBookingModal from '../modals/CargoManagerBookingModal';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 export default function ShipManagementDashboard() {
   const { user } = useAuth();
@@ -44,10 +45,14 @@ export default function ShipManagementDashboard() {
   const [serviceRequests, setServiceRequests] = useState([]);
   const [srLoading, setSrLoading] = useState(false);
   const [serviceRequestDetailsModal, setServiceRequestDetailsModal] = useState({ open: false, request: null });
+  const [bookingFromServiceRequest, setBookingFromServiceRequest] = useState(null);
 
   // Navigation state
   const [activeSection, setActiveSection] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Combined vessels from fleet and accepted service requests
+  const [combinedVessels, setCombinedVessels] = useState([]);
 
   const loadServiceRequests = async () => {
     try {
@@ -86,6 +91,27 @@ export default function ShipManagementDashboard() {
     loadBookings();
     loadServiceRequests();
   }, []);
+
+  // Combine fleet vessels with accepted service request vessels
+  useEffect(() => {
+    // Start with fleet vessels
+    let allVessels = [...vessels];
+    
+    // Add vessels from accepted service requests that are not already in the fleet
+    const acceptedRequests = serviceRequests.filter(request => request.status === 'accepted');
+    acceptedRequests.forEach(request => {
+      if (request.vessel) {
+        // Check if vessel is already in the fleet
+        const vesselExists = allVessels.some(vessel => vessel._id === request.vessel._id);
+        if (!vesselExists) {
+          // Add the vessel from the service request
+          allVessels.push(request.vessel);
+        }
+      }
+    });
+    
+    setCombinedVessels(allVessels);
+  }, [vessels, serviceRequests]);
 
   // Unread counts for messaging
   const { counts } = useUnreadCounts();
@@ -181,6 +207,7 @@ export default function ShipManagementDashboard() {
       
       setShowSurveyorBookingModal(false);
       setEditingSurveyorBooking(null);
+      setBookingFromServiceRequest(null);
       loadBookings(); // Reload bookings
       
       // Clear success message after 3 seconds
@@ -191,9 +218,34 @@ export default function ShipManagementDashboard() {
     }
   };
 
-  const handleEditSurveyorBooking = (booking) => {
-    setEditingSurveyorBooking(booking);
-    setShowSurveyorBookingModal(true);
+  const handleEditSurveyorBooking = async (booking) => {
+    try {
+      setBookingsLoading(true);
+      // Fetch the full booking details with file data
+      const response = await axios.get(`/api/surveyor-bookings/${booking._id}`);
+      setEditingSurveyorBooking(response.data);
+      setShowSurveyorBookingModal(true);
+    } catch (err) {
+      console.error('Error fetching surveyor booking details:', err);
+      setError('Failed to load booking details');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const handleEditCargoManagerBooking = async (booking) => {
+    try {
+      setBookingsLoading(true);
+      // Fetch the full booking details with file data
+      const response = await axios.get(`/api/cargo-manager-bookings/${booking._id}`);
+      setEditingCargoManagerBooking(response.data);
+      setShowCargoManagerBookingModal(true);
+    } catch (err) {
+      console.error('Error fetching cargo manager booking details:', err);
+      setError('Failed to load booking details');
+    } finally {
+      setBookingsLoading(false);
+    }
   };
 
   const handleDeleteSurveyorBooking = async (bookingId) => {
@@ -238,6 +290,94 @@ export default function ShipManagementDashboard() {
       
       setShowCargoManagerBookingModal(false);
       setEditingCargoManagerBooking(null);
+      setBookingFromServiceRequest(null);
+      loadBookings(); // Reload bookings
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving cargo manager booking:', err);
+      setError(`Failed to ${editingCargoManagerBooking ? 'update' : 'create'} cargo manager booking`);
+    }
+  };
+
+  const handleDeleteCargoManagerBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to delete this cargo manager booking?')) {
+      return;
+    }
+    
+    try {
+      setBookingsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/api/cargo-manager-bookings/${bookingId}`, config);
+      setSuccessMessage('Cargo manager booking deleted successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting cargo manager booking:', err);
+      setError('Failed to delete cargo manager booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const handleEditCargoManagerBooking = (booking) => {
+    setEditingBooking(booking);
+    setEditing(true);
+  };
+
+  const handleSaveCargoManagerBooking = async (booking) => {
+    try {
+      setBookingsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.put(`/api/cargo-manager-bookings/${booking.id}`, booking, config);
+      setSuccessMessage('Cargo manager booking updated successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error updating cargo manager booking:', err);
+      setError('Failed to update cargo manager booking');
+    } finally {
+      setBookingsLoading(false);
+      setEditing(false);
+    }
+  };
+  };
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      await axios.delete(`/api/cargo-manager-bookings/${bookingId}`, config);
+      setSuccessMessage('Cargo manager booking deleted successfully!');
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting cargo manager booking:', err);
+      setError('Failed to delete cargo manager booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      let response;
+      if (editingCargoManagerBooking) {
+        console.log('Updating cargo manager booking:', bookingData);
+        response = await axios.put(`/api/cargo-manager-bookings/${editingCargoManagerBooking._id}`, bookingData, config);
+        console.log('Cargo manager booking updated successfully:', response.data);
+        setSuccessMessage('Cargo manager booking updated successfully!');
+      } else {
+        console.log('Creating cargo manager booking:', bookingData);
+        response = await axios.post('/api/cargo-manager-bookings', bookingData, config);
+        console.log('Cargo manager booking created successfully:', response.data);
+        setSuccessMessage('Cargo manager booking created successfully!');
+      }
+      
+      setShowCargoManagerBookingModal(false);
+      setEditingCargoManagerBooking(null);
+      setBookingFromServiceRequest(null);
       loadBookings(); // Reload bookings
       
       // Clear success message after 3 seconds
@@ -263,7 +403,7 @@ export default function ShipManagementDashboard() {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
       
-      await axios.delete(`/api/cargo-manager-bookings/${bookingId}`, config);
+      await axios.delete(`/cargo-manager-bookings/${bookingId}`, config);
       setSuccessMessage('Cargo manager booking deleted successfully!');
       loadBookings();
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -320,64 +460,9 @@ export default function ShipManagementDashboard() {
     }
   };
 
-  const [uploading, setUploading] = useState(false);
-
-  const handleFlightTicketUpload = async (bookingId, file) => {
-    try {
-      setUploading(true);
-      
-      // Validate file size (10MB max)
-      const maxFileSize = 10 * 1024 * 1024; // 10MB
-      if (file.size > maxFileSize) {
-        setError('File size exceeds 10MB limit');
-        return;
-      }
-      
-      // Validate file type (images and PDFs allowed)
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-      if (!validTypes.includes(file.type.toLowerCase())) {
-        setError('Invalid file type. Only images and PDF files are allowed.');
-        return;
-      }
-
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const fileData = {
-            name: file.name,
-            data: reader.result,
-            file: file
-          };
-
-          // Send to backend
-          const token = localStorage.getItem('token');
-          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-          
-          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
-            flightTicket: fileData
-          }, config);
-          
-          setSuccessMessage('Flight ticket uploaded successfully!');
-          loadBookings(); // Reload bookings to show updated data
-        } catch (err) {
-          console.error('Error uploading flight ticket:', err);
-          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
-        } finally {
-          setUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Error processing file:', err);
-      setError('Failed to process file');
-      setUploading(false);
-    }
-  };
-
   const handleUpdateVessel = async (id, vesselData) => {
     try {
-      const response = await axios.put(`/api/vessels/${id}`, vesselData);
+      const response = await axios.put(`/vessels/${id}`, vesselData);
       setVessels(prev => prev.map(vessel => 
         vessel._id === id ? response.data : vessel
       ));
@@ -1138,624 +1223,6 @@ export default function ShipManagementDashboard() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo Manager</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {cargoManagerBookings
-                      .filter(booking => ['Pending', 'Accepted', 'Declined'].includes(booking.status))
-                      .map((booking) => (
-                      <tr key={booking._id} onClick={() => setDetailsModal({ open: true, type: 'cargo_manager', booking })} className="cursor-pointer hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-8 w-8">
-                              <div className="h-8 w-8 rounded-full bg-marine-blue flex items-center justify-center">
-                                <span className="text-sm font-medium text-white">
-                                  {booking.cargoManager?.name?.charAt(0)?.toUpperCase() || 'C'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-3">
-                              <div className="text-sm font-medium text-gray-900">{booking.cargoManager?.name || 'Unknown'}</div>
-                              <div className="text-sm text-gray-500">{booking.vesselName}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>{formatDate(booking.inspectionDate)}</div>
-                          <div className="text-gray-500">{booking.inspectionTime}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>{booking.surveyType}</div>
-                          <div className="text-gray-500">{booking.shipType}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            booking.status === 'Accepted' ? 'bg-green-100 text-green-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {booking.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditCargoManagerBooking(booking);
-                            }}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Edit booking"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCargoManagerBooking(booking._id);
-                            }}
-                            className="text-red-600 hover:text-red-800"
-                            title="Delete booking"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                          {/* Assignment functionality removed as per requirements */}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-          </>
-        )}
-
-        {/* Ship Insights Section */}
-        {activeSection === 'maintenance' && (
-          <>
-            {/* Maintenance Schedule */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Schedule</h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-500">Scheduled maintenance tasks for all vessels</p>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {maintenanceSchedule.map((task, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium text-gray-900">{task.vesselName}</div>
-                      <div className="text-sm text-gray-600">{task.task}</div>
-                      <div className="text-sm text-gray-500">{formatDate(task.date)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Crew Assignments */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">Crew Assignments</h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-500">Current crew assignments for all vessels</p>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {crewAssignments.map((assignment, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium text-gray-900">{assignment.vesselName}</div>
-                      <div className="text-sm text-gray-600">{assignment.crewMember}</div>
-                      <div className="text-sm text-gray-500">{formatDate(assignment.startDate)} - {formatDate(assignment.endDate)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </DashboardLayout>
-  );
-}
-
-// Flight Ticket Upload Component
-function FlightTicketUpload({ bookingId, onUploadSuccess }) {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const fileInputRef = useRef(null);
-
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!selectedFile) return;
-
-    // Validate file size (10MB max)
-    const maxFileSize = 10 * 1024 * 1024; // 10MB
-    if (selectedFile.size > maxFileSize) {
-      setError('File size exceeds 10MB limit');
-      setFile(null);
-      return;
-    }
-
-    // Validate file type (images and PDFs allowed)
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-    if (!validTypes.includes(selectedFile.type.toLowerCase())) {
-      setError('Invalid file type. Only images and PDF files are allowed.');
-      setFile(null);
-      return;
-    }
-
-    setFile(selectedFile);
-    setError('');
-  };
-
-  const handleUpload = async () => {
-    if (!file || !bookingId) return;
-
-    try {
-      setUploading(true);
-      setError('');
-      
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const fileData = {
-            name: file.name,
-            data: reader.result
-          };
-
-          // Send to backend
-          const token = localStorage.getItem('token');
-          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-          
-          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
-            flightTicket: fileData
-          }, config);
-          
-          setSuccess('Flight ticket uploaded successfully!');
-          setFile(null);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-          
-          // Call success callback to refresh data
-          if (onUploadSuccess) {
-            setTimeout(() => {
-              onUploadSuccess();
-            }, 1000);
-          }
-        } catch (err) {
-          console.error('Error uploading flight ticket:', err);
-          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
-        } finally {
-          setUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Error processing file:', err);
-      setError('Failed to process file');
-      setUploading(false);
-    }
-  };
-
-  const handleRemove = () => {
-    setFile(null);
-    setError('');
-    setSuccess('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-          {success}
-        </div>
-      )}
-      
-      <div className="flex items-start space-x-3">
-        <div className="flex-1">
-          <label className="flex justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-md hover:border-marine-blue transition-colors cursor-pointer">
-            <div className="space-y-1 text-center">
-              <svg
-                className="mx-auto h-8 w-8 text-gray-400"
-                stroke="currentColor"
-                fill="none"
-                viewBox="0 0 48 48"
-              >
-                <path
-                  d="M8 14v20c0 4.418 7.163 8 16 8 1.381 0 2.721-.087 4-.252M8 14c0 4.418 7.163 8 16 8s16-3.582 16-8M8 14c0-4.418 7.163-8 16-8s16 3.582 16 8m0 0v14m0-4c0 4.418-7.163 8-16 8S8 28.418 8 24m32 10v6m0 0v6m0-6h6m-6 0h-6"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-sm text-gray-600">
-                <span className="font-medium text-marine-blue hover:text-marine-dark">
-                  {file ? file.name : 'Upload flight ticket'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".pdf,image/*"
-              onChange={handleFileChange}
-              className="sr-only"
-              disabled={uploading}
-            />
-          </label>
-        </div>
-        
-        {file && (
-          <div className="flex flex-col space-y-2">
-            <button
-              onClick={handleUpload}
-              disabled={uploading}
-              className={`px-3 py-2 text-sm rounded-md text-white ${
-                uploading 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-marine-blue hover:bg-marine-dark'
-              }`}
-            >
-              {uploading ? 'Uploading...' : 'Upload'}
-            </button>
-            <button
-              onClick={handleRemove}
-              disabled={uploading}
-              className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-            >
-              Remove
-            </button>
-          </div>
-        )}
-      </div>
-      
-      {!file && (
-        <p className="text-xs text-gray-500">
-          Upload flight ticket for this surveyor. This will be visible in the surveyor's dashboard.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Flight Ticket Upload Component
-function FlightTicketUpload({ bookingId, onUploadSuccess }) {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const fileInputRef = useRef(null);
-
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!selectedFile) return;
-
-    // Validate file size (10MB max)
-    const maxFileSize = 10 * 1024 * 1024; // 10MB
-    if (selectedFile.size > maxFileSize) {
-      setError('File size exceeds 10MB limit');
-      setFile(null);
-      return;
-    }
-
-    // Validate file type (images and PDFs allowed)
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-    if (!validTypes.includes(selectedFile.type.toLowerCase())) {
-      setError('Invalid file type. Only images and PDF files are allowed.');
-      setFile(null);
-      return;
-    }
-
-    setFile(selectedFile);
-    setError('');
-  };
-
-  const handleUpload = async () => {
-    if (!file || !bookingId) return;
-
-    try {
-      setUploading(true);
-      setError('');
-      
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const fileData = {
-            name: file.name,
-            data: reader.result
-          };
-
-          // Send to backend
-          const token = localStorage.getItem('token');
-          const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-          
-          await axios.put(`/api/surveyor-bookings/${bookingId}/assign`, {
-            flightTicket: fileData
-          }, config);
-          
-          setSuccess('Flight ticket uploaded successfully!');
-          setFile(null);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-          
-          // Call success callback to refresh data
-          if (onUploadSuccess) {
-            setTimeout(() => {
-              onUploadSuccess();
-            }, 1000);
-          }
-        } catch (err) {
-          console.error('Error uploading flight ticket:', err);
-          setError(err.response?.data?.msg || 'Failed to upload flight ticket');
-        } finally {
-          setUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Error processing file:', err);
-      setError('Failed to process file');
-      setUploading(false);
-    }
-  };
-
-  const handleRemove = () => {
-    setFile(null);
-    setError('');
-    setSuccess('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-          {success}
-        </div>
-      )}
-      
-      <div className="flex items-start space-x-3">
-        <div className="flex-1">
-          <label className="flex justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-md hover:border-marine-blue transition-colors cursor-pointer">
-            <div className="space-y-1 text-center">
-              <svg
-                className="mx-auto h-8 w-8 text-gray-400"
-                stroke="currentColor"
-                fill="none"
-                viewBox="0 0 48 48"
-              >
-                <path
-                  d="M8 14v20c0 4.418 7.163 8 16 8 1.381 0 2.721-.087 4-.252M8 14c0 4.418 7.163 8 16 8s16-3.582 16-8M8 14c0-4.418 7.163-8 16-8s16 3.582 16 8m0 0v14m0-4c0 4.418-7.163 8-16 8S8 28.418 8 24m32 10v6m0 0v6m0-6h6m-6 0h-6"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <div className="text-sm text-gray-600">
-                <span className="font-medium text-marine-blue hover:text-marine-dark">
-                  {file ? file.name : 'Upload flight ticket'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".pdf,image/*"
-              onChange={handleFileChange}
-              className="sr-only"
-              disabled={uploading}
-            />
-          </label>
-        </div>
-        
-        {file && (
-          <div className="flex flex-col space-y-2">
-            <button
-              onClick={handleUpload}
-              disabled={uploading}
-              className={`px-3 py-2 text-sm rounded-md text-white ${
-                uploading 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-marine-blue hover:bg-marine-dark'
-              }`}
-            >
-              {uploading ? 'Uploading...' : 'Upload'}
-            </button>
-            <button
-              onClick={handleRemove}
-              disabled={uploading}
-              className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-            >
-              Remove
-            </button>
-          </div>
-        )}
-      </div>
-      
-      {!file && (
-        <p className="text-xs text-gray-500">
-          Upload flight ticket for this surveyor. This will be visible in the surveyor's dashboard.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Vessel Modal Component
-function VesselModal({ vessel, onSave, onClose }) {
-  const [name, setName] = useState(vessel?.name || '');
-  const [imo, setIMO] = useState(vessel?.imo || '');
-  const [vesselType, setVesselType] = useState(vessel?.vesselType || '');
-  const [flag, setFlag] = useState(vessel?.flag || '');
-  const [yearBuilt, setYearBuilt] = useState(vessel?.yearBuilt || '');
-  const [grossTonnage, setGrossTonnage] = useState(vessel?.grossTonnage || '');
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!name || !imo || !vesselType || !flag || !yearBuilt || !grossTonnage) {
-      setError('All fields are required');
-      return;
-    }
-
-    const vesselData = {
-      name,
-      imo,
-      vesselType,
-      flag,
-      yearBuilt,
-      grossTonnage
-    };
-
-    try {
-      if (vessel) {
-        await axios.put(`/api/vessels/${vessel._id}`, vesselData);
-      } else {
-        await axios.post('/api/vessels', vesselData);
-      }
-      onSave();
-      onClose();
-    } catch (err) {
-      console.error('Error saving vessel:', err);
-      setError('Failed to save vessel');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl">
-        <h2 className="text-lg font-semibold mb-4">
-          {vessel ? 'Edit Vessel' : 'Add New Vessel'}
-        </h2>
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Ship Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">IMO Number</label>
-              <input
-                type="text"
-                value={imo}
-                onChange={(e) => setIMO(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Vessel Type</label>
-              <input
-                type="text"
-                value={vesselType}
-                onChange={(e) => setVesselType(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Flag</label>
-              <input
-                type="text"
-                value={flag}
-                onChange={(e) => setFlag(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Year Built</label>
-              <input
-                type="number"
-                value={yearBuilt}
-                onChange={(e) => setYearBuilt(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Gross Tonnage</label>
-              <input
-                type="number"
-                value={grossTonnage}
-                onChange={(e) => setGrossTonnage(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-marine-blue focus:border-marine-blue sm:text-sm"
-                required
-              />
-            </div>
-          </div>
-          {error && (
-            <div className="mt-4 text-sm text-red-600 bg-red-50 p-2 rounded">
-              {error}
-            </div>
-          )}
-          <div className="mt-6 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-marine-blue hover:bg-marine-dark rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo Manager</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voyage</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -2026,8 +1493,21 @@ function VesselModal({ vessel, onSave, onClose }) {
         }}
         onSave={handleSurveyorBooking}
         surveyors={surveyors}
-        vessels={vessels}
+        vessels={combinedVessels} // Use combined vessels instead of just fleet vessels
         booking={editingSurveyorBooking}
+      />
+
+      {/* Cargo Manager Booking Modal */}
+      <CargoManagerBookingModal
+        isOpen={showCargoManagerBookingModal}
+        onClose={() => {
+          setShowCargoManagerBookingModal(false);
+          setEditingCargoManagerBooking(null);
+        }}
+        onSave={handleCargoManagerBooking}
+        cargoManagers={cargoManagers}
+        vessels={combinedVessels} // Use combined vessels instead of just fleet vessels
+        booking={editingCargoManagerBooking}
       />
 
       {/* Details Modal */}
@@ -2085,36 +1565,46 @@ function VesselModal({ vessel, onSave, onClose }) {
                       <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
                     </div>
                   )}
-                  {/* Flight Ticket Upload Section */}
-                  <div className="sm:col-span-2 mt-4 pt-4 border-t border-gray-200">
-                    <h4 className="text-md font-medium text-gray-900 mb-2">Flight Ticket</h4>
-                    {detailsModal.booking?.flightTicket ? (
-                      <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
-                        <div className="flex items-center">
-                          <svg className="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <span className="text-sm font-medium text-gray-900">{detailsModal.booking.flightTicket.name}</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = detailsModal.booking.flightTicket.data;
-                            link.download = detailsModal.booking.flightTicket.name;
-                            link.click();
-                          }}
-                          className="text-sm text-marine-blue hover:text-marine-dark font-medium"
-                        >
-                          Download
-                        </button>
+                  
+                  {/* Vessel Media Section for Surveyor Booking */}
+                  {detailsModal.booking?.vessel?.media && detailsModal.booking.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Ship Media & Certificates</div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {detailsModal.booking.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <FlightTicketUpload 
-                        bookingId={detailsModal.booking?._id}
-                        onUploadSuccess={() => loadBookings()}
-                      />
-                    )}
-                  </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {detailsModal.booking.vessel.media.length} media file(s) uploaded for this vessel
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2164,6 +1654,46 @@ function VesselModal({ vessel, onSave, onClose }) {
                       <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
                     </div>
                   )}
+                  
+                  {/* Vessel Media Section for Cargo Manager Booking */}
+                  {detailsModal.booking?.vessel?.media && detailsModal.booking.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Ship Media & Certificates</div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {detailsModal.booking.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {detailsModal.booking.vessel.media.length} media file(s) uploaded for this vessel
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2182,17 +1712,50 @@ function VesselModal({ vessel, onSave, onClose }) {
         </div>
       )}
 
+      {/* Surveyor Booking Modal */}
+      <SurveyorBookingModal
+        isOpen={showSurveyorBookingModal}
+        onClose={() => {
+          setShowSurveyorBookingModal(false);
+          setEditingSurveyorBooking(null);
+          setBookingFromServiceRequest(null);
+        }}
+        onSave={(bookingData) => {
+          // If booking from service request, add reference to the service request
+          const finalBookingData = bookingFromServiceRequest 
+            ? { ...bookingData, serviceRequestId: bookingFromServiceRequest._id }
+            : bookingData;
+          handleSurveyorBooking(finalBookingData);
+          setBookingFromServiceRequest(null);
+        }}
+        surveyors={surveyors}
+        vessels={combinedVessels} // Use combined vessels instead of just fleet vessels
+        booking={editingSurveyorBooking}
+        fromServiceRequest={!!bookingFromServiceRequest}
+        serviceRequestVessel={bookingFromServiceRequest?.vessel}
+      />
+
       {/* Cargo Manager Booking Modal */}
       <CargoManagerBookingModal
         isOpen={showCargoManagerBookingModal}
         onClose={() => {
           setShowCargoManagerBookingModal(false);
           setEditingCargoManagerBooking(null);
+          setBookingFromServiceRequest(null);
         }}
-        onSave={handleCargoManagerBooking}
+        onSave={(bookingData) => {
+          // If booking from service request, add reference to the service request
+          const finalBookingData = bookingFromServiceRequest 
+            ? { ...bookingData, serviceRequestId: bookingFromServiceRequest._id }
+            : bookingData;
+          handleCargoManagerBooking(finalBookingData);
+          setBookingFromServiceRequest(null);
+        }}
         cargoManagers={cargoManagers}
-        vessels={vessels}
+        vessels={combinedVessels} // Use combined vessels instead of just fleet vessels
         booking={editingCargoManagerBooking}
+        fromServiceRequest={!!bookingFromServiceRequest}
+        serviceRequestVessel={bookingFromServiceRequest?.vessel}
       />
 
       {/* Assignment modals removed as per requirements */}
@@ -2281,6 +1844,46 @@ function VesselModal({ vessel, onSave, onClose }) {
                       </p>
                     </div>
                   )}
+                  
+                  {/* Vessel Media Section */}
+                  {serviceRequestDetailsModal.request.vessel?.media && serviceRequestDetailsModal.request.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Ship Media & Certificates</label>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {serviceRequestDetailsModal.request.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {serviceRequestDetailsModal.request.vessel.media.length} media file(s) uploaded for this vessel
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2307,6 +1910,34 @@ function VesselModal({ vessel, onSave, onClose }) {
                       className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
                     >
                       Decline
+                    </button>
+                  </>
+                )}
+                {serviceRequestDetailsModal.request?.status === 'accepted' && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Set up surveyor booking with data from service request
+                        setBookingFromServiceRequest(serviceRequestDetailsModal.request);
+                        setShowSurveyorBookingModal(true);
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    >
+                      Book Surveyor
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Set up cargo manager booking with data from service request
+                        setBookingFromServiceRequest(serviceRequestDetailsModal.request);
+                        setShowCargoManagerBookingModal(true);
+                        setServiceRequestDetailsModal({ open: false, request: null });
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700"
+                    >
+                      Book Cargo Manager
                     </button>
                   </>
                 )}

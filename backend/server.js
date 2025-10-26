@@ -77,6 +77,7 @@ app.use('/api/user-management', require('./routes/user-management'));
 app.use('/api/surveyor-bookings', require('./routes/surveyor-bookings'));
 app.use('/api/cargo-manager-bookings', require('./routes/cargo-manager-bookings'));
 app.use('/api/service-requests', require('./routes/service-requests'));
+app.use('/api/owner-bookings', require('./routes/owner-bookings'));
 
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {

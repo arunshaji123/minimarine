@@ -80,12 +80,10 @@ export default function OwnerDashboard() {
         
         // Load surveyor bookings for owner's vessels
         const surveyorBookingsRes = await axios.get('/api/owner-bookings/surveyor');
-        console.log('Surveyor bookings data:', surveyorBookingsRes.data); // Debug log
         setSurveyorBookings(surveyorBookingsRes.data);
         
         // Load cargo manager bookings for owner's vessels
         const cargoManagerBookingsRes = await axios.get('/api/owner-bookings/cargo');
-        console.log('Cargo manager bookings data:', cargoManagerBookingsRes.data); // Debug log
         setCargoManagerBookings(cargoManagerBookingsRes.data);
         
         setLoading(false);
@@ -1024,18 +1022,7 @@ export default function OwnerDashboard() {
                       {surveyorBookings.filter(booking => {
                         const inspectionDate = new Date(booking.inspectionDate);
                         const now = new Date();
-                        const result = inspectionDate <= now && booking.status === 'Accepted';
-                        // Debug logs
-                        console.log('Active survey filter check:', {
-                          bookingId: booking._id,
-                          inspectionDate: inspectionDate,
-                          now: now,
-                          dateComparison: inspectionDate <= now,
-                          status: booking.status,
-                          statusMatch: booking.status === 'Accepted',
-                          result: result
-                        });
-                        return result;
+                        return inspectionDate <= now && booking.status === 'Accepted';
                       }).map((booking) => (
                         <tr key={booking._id}>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1061,6 +1048,16 @@ export default function OwnerDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => {
+                                setSelectedBooking(booking);
+                                setBookingModalType('surveyor');
+                                setBookingModalOpen(true);
+                              }}
+                              className="text-marine-blue hover:text-marine-dark"
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1128,6 +1125,16 @@ export default function OwnerDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => {
+                                setSelectedBooking(booking);
+                                setBookingModalType('surveyor');
+                                setBookingModalOpen(true);
+                              }}
+                              className="text-marine-blue hover:text-marine-dark"
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1206,6 +1213,16 @@ export default function OwnerDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => {
+                                setSelectedBooking(booking);
+                                setBookingModalType('cargo');
+                                setBookingModalOpen(true);
+                              }}
+                              className="text-marine-blue hover:text-marine-dark"
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1275,6 +1292,16 @@ export default function OwnerDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => {
+                                setSelectedBooking(booking);
+                                setBookingModalType('cargo');
+                                setBookingModalOpen(true);
+                              }}
+                              className="text-marine-blue hover:text-marine-dark"
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))}
