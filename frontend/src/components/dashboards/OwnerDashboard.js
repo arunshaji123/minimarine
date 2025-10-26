@@ -30,6 +30,11 @@ export default function OwnerDashboard() {
   const [showServiceRequestModal, setShowServiceRequestModal] = useState(false);
   const [serviceRequests, setServiceRequests] = useState([]);
   const [editingServiceRequest, setEditingServiceRequest] = useState(null);
+
+  // File upload states for vessel modal
+  const [photos, setPhotos] = useState([]); // For storing photo previews
+  const [videos, setVideos] = useState([]); // For storing video previews
+
   // Use authenticated user info with safe fallbacks
   const profile = {
     name: user?.name || 'Owner',
@@ -135,28 +140,72 @@ export default function OwnerDashboard() {
     { id: 'service_requests', label: 'Service Requests', icon: <FaTools className="mr-2" /> }
   ];
 
-  const handleAddVessel = async (vesselData) => {
+  const handleAddVessel = async (vesselData, isMultipart = false) => {
     try {
-      const res = await axios.post('/api/vessels', vesselData);
+      let res;
+      if (isMultipart) {
+        // Handle multipart form data with files
+        res = await axios.post('/api/vessels', vesselData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      } else {
+        // Handle regular JSON data
+        res = await axios.post('/api/vessels', vesselData);
+      }
+      
       setVessels(prev => [res.data, ...prev]);
       setShowVesselModal(false);
       setEditingVessel(null);
-      setSuccessMessage(`Vessel "${vesselData.name}" created successfully!`);
+      setSuccessMessage(`Vessel "${res.data.name}" created successfully!`);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
       console.error('Error adding vessel:', err);
-      const msg = err.response?.data?.msg || err.response?.data?.message || 'Failed to add vessel';
-      setError(msg);
+      
+      // Handle validation errors
+      let errorMsg = 'Failed to add vessel';
+      if (err.response?.data) {
+        if (err.response.data.msg) {
+          errorMsg = err.response.data.msg;
+        } else if (err.response.data.message) {
+          errorMsg = err.response.data.message;
+        }
+        
+        // Add specific validation errors if present
+        if (err.response.data.errors && Array.isArray(err.response.data.errors)) {
+          errorMsg += ': ' + err.response.data.errors.join(', ');
+        }
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
+      setError(errorMsg);
+      
+      // Keep the modal open so user can fix errors
+      // setShowVesselModal will remain true
     }
   };
 
-  const handleUpdateVessel = async (id, vesselData) => {
+  const handleUpdateVessel = async (id, vesselData, isMultipart = false) => {
     try {
-      const res = await axios.put(`/api/vessels/${id}`, vesselData);
+      let res;
+      if (isMultipart) {
+        // Handle multipart form data with files
+        res = await axios.put(`/api/vessels/${id}`, vesselData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      } else {
+        // Handle regular JSON data
+        res = await axios.put(`/api/vessels/${id}`, vesselData);
+      }
+      
       setVessels(prev => prev.map(v => v._id === id ? res.data : v));
       setShowVesselModal(false);
       setEditingVessel(null);
-      setSuccessMessage(`Vessel "${vesselData.name}" updated successfully!`);
+      setSuccessMessage(`Vessel "${res.data.name}" updated successfully!`);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
       console.error('Error updating vessel:', err);
@@ -573,6 +622,43 @@ export default function OwnerDashboard() {
                         </span>
                       </div>
                     </div>
+                    
+                    {/* Media Preview Section */}
+                    {vessel.media && vessel.media.length > 0 && (
+                      <div className="mt-4">
+                        <h5 className="text-sm font-medium text-gray-900 mb-2">Media ({vessel.media.length})</h5>
+                        <div className="grid grid-cols-3 gap-1">
+                          {vessel.media.slice(0, 3).map((media, mediaIndex) => (
+                            <div key={mediaIndex} className="relative">
+                              {media.type === 'photo' ? (
+                                <img 
+                                  src={media.url} 
+                                  alt={`Vessel media ${mediaIndex + 1}`}
+                                  className="w-full h-16 object-cover rounded"
+                                />
+                              ) : media.type === 'certificate' ? (
+                                <div className="w-full h-16 bg-red-100 rounded flex items-center justify-center">
+                                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                </div>
+                              ) : (
+                                <div className="w-full h-16 bg-gray-200 rounded flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {vessel.media.length > 3 && (
+                            <div className="w-full h-16 bg-gray-100 rounded flex items-center justify-center">
+                              <span className="text-xs text-gray-500">+{vessel.media.length - 3} more</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="bg-gray-50 px-6 py-3 flex justify-between">
@@ -988,7 +1074,10 @@ export default function OwnerDashboard() {
       {showVesselModal && (
         <VesselModal
           vessel={editingVessel}
-          onSave={editingVessel ? (data) => handleUpdateVessel(editingVessel._id, data) : handleAddVessel}
+          onSave={editingVessel ? 
+            (data, isMultipart) => handleUpdateVessel(editingVessel._id, data, isMultipart) : 
+            (data, isMultipart) => handleAddVessel(data, isMultipart)
+          }
           onClose={() => { setShowVesselModal(false); setEditingVessel(null); }}
         />
       )}
@@ -999,6 +1088,7 @@ export default function OwnerDashboard() {
 // Inline ShipModal copied to match ShipManagementDashboard fields/validation
 function VesselModal({ vessel, onSave, onClose }) {
   const [formData, setFormData] = useState({
+    // Ship details
     name: vessel?.name || '',
     imo: vessel?.imo || '',
     vesselType: vessel?.vesselType || 'Container Ship',
@@ -1010,10 +1100,17 @@ function VesselModal({ vessel, onSave, onClose }) {
       beam: vessel?.dimensions?.beam || '',
       draft: vessel?.dimensions?.draft || ''
     },
-    shipManagement: vessel?.shipManagement?._id || vessel?.shipManagement || ''
+    shipManagement: vessel?.shipManagement?._id || vessel?.shipManagement || null
   });
 
+  // File upload states
+  const [photos, setPhotos] = useState([]); // For storing photo previews
+  const [videos, setVideos] = useState([]); // For storing video previews
+  const [certificates, setCertificates] = useState([]); // For storing certificate previews
+  const [uploadedFiles, setUploadedFiles] = useState([]); // For storing uploaded file data
+
   const [shipCompanies, setShipCompanies] = useState([]);
+  const [error, setError] = useState('');
   useEffect(() => {
     const loadCompanies = async () => {
       try {
@@ -1030,6 +1127,7 @@ function VesselModal({ vessel, onSave, onClose }) {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
+
   const vesselTypes = [
     'Bulk Carrier',
     'Container Ship', 
@@ -1042,6 +1140,7 @@ function VesselModal({ vessel, onSave, onClose }) {
   const validateField = (name, value) => {
     let error = '';
     switch (name) {
+      // Ship details validation
       case 'name':
         if (!value.trim()) error = 'Ship name is required';
         break;
@@ -1087,78 +1186,559 @@ function VesselModal({ vessel, onSave, onClose }) {
     validateField(name, value);
   };
 
-  const handleSubmit = (e) => {
+  // Handle photo upload
+  const handlePhotoUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length + photos.length > 10) {
+      alert('Maximum 10 photos allowed');
+      return;
+    }
+
+    const newPhotos = [];
+    let processed = 0;
+
+    files.forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`${file.name} exceeds 5MB limit`);
+        processed++;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newPhotos.push({
+          file: file, // Store the actual file object
+          name: file.name,
+          data: e.target.result,
+          size: file.size,
+          type: file.type
+        });
+        processed++;
+        
+        if (processed === files.length) {
+          setPhotos(prev => [...prev, ...newPhotos]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle video upload
+  const handleVideoUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length + videos.length > 5) {
+      alert('Maximum 5 videos allowed');
+      return;
+    }
+
+    const newVideos = [];
+    let processed = 0;
+
+    files.forEach(file => {
+      if (file.size > 50 * 1024 * 1024) {
+        alert(`${file.name} exceeds 50MB limit`);
+        processed++;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newVideos.push({
+          file: file, // Store the actual file object
+          name: file.name,
+          data: e.target.result,
+          size: file.size,
+          type: file.type
+        });
+        processed++;
+        
+        if (processed === files.length) {
+          setVideos(prev => [...prev, ...newVideos]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle certificate upload
+  const handleCertificateUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length + certificates.length > 10) {
+      alert('Maximum 10 certificates allowed');
+      return;
+    }
+
+    const newCertificates = [];
+    let processed = 0;
+
+    files.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`${file.name} exceeds 10MB limit`);
+        processed++;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newCertificates.push({
+          file: file, // Store the actual file object
+          name: file.name,
+          data: e.target.result,
+          size: file.size,
+          type: file.type
+        });
+        processed++;
+        
+        if (processed === files.length) {
+          setCertificates(prev => [...prev, ...newCertificates]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // State to track media marked for deletion
+  const [mediaToDelete, setMediaToDelete] = useState([]);
+
+  useEffect(() => {
+    // When editing a vessel, pre-populate the media arrays with existing media
+    if (vessel) {
+      // Reset all media states
+      setPhotos([]);
+      setVideos([]);
+      setCertificates([]);
+      setMediaToDelete([]);
+      
+      // If the vessel has existing media, populate the arrays
+      if (vessel.media && Array.isArray(vessel.media)) {
+        vessel.media.forEach(mediaItem => {
+          // Create a preview object for each existing media item
+          const preview = {
+            name: mediaItem.fileName || 'Unknown File',
+            data: mediaItem.thumbnailUrl || mediaItem.url, // Use thumbnail if available
+            size: mediaItem.fileSize || 0,
+            type: mediaItem.mimeType || 'unknown',
+            url: mediaItem.url,
+            _id: mediaItem._id // Store the media ID for identification
+          };
+          
+          // Categorize media by type
+          switch (mediaItem.type) {
+            case 'photo':
+              setPhotos(prev => [...prev, preview]);
+              break;
+            case 'video':
+              setVideos(prev => [...prev, preview]);
+              break;
+            case 'certificate':
+              setCertificates(prev => [...prev, preview]);
+              break;
+            default:
+              // Default to photo for unknown types
+              setPhotos(prev => [...prev, preview]);
+          }
+        });
+      }
+    } else {
+      // When creating a new vessel, reset all media states
+      setPhotos([]);
+      setVideos([]);
+      setCertificates([]);
+      setMediaToDelete([]);
+    }
+  }, [vessel]);
+
+  // Remove photo
+  const removePhoto = (index) => {
+    const photoToRemove = photos[index];
+    
+    // If this is an existing photo (has _id), mark it for deletion
+    if (photoToRemove._id) {
+      setMediaToDelete(prev => [...prev, photoToRemove._id]);
+    }
+    
+    // Remove from photos array
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Remove video
+  const removeVideo = (index) => {
+    const videoToRemove = videos[index];
+    
+    // If this is an existing video (has _id), mark it for deletion
+    if (videoToRemove._id) {
+      setMediaToDelete(prev => [...prev, videoToRemove._id]);
+    }
+    
+    // Remove from videos array
+    setVideos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Remove certificate
+  const removeCertificate = (index) => {
+    const certificateToRemove = certificates[index];
+    
+    // If this is an existing certificate (has _id), mark it for deletion
+    if (certificateToRemove._id) {
+      setMediaToDelete(prev => [...prev, certificateToRemove._id]);
+    }
+    
+    // Remove from certificates array
+    setCertificates(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Clear any previous errors
+    setError('');
+    
     const allTouched = {};
-    Object.keys(formData).forEach(key => { if (key !== 'dimensions') allTouched[key] = true; });
+    Object.keys(formData).forEach(key => { 
+      if (key !== 'dimensions') allTouched[key] = true; 
+    });
     setTouched(allTouched);
-    const isValid = Object.keys(formData).every(key => key === 'dimensions' || validateField(key, formData[key]));
-    if (isValid) onSave(formData);
+
+    // Validate all fields
+    const isValid = Object.keys(formData).every(key => {
+      if (key === 'dimensions') return true;
+      // Skip validation for shipManagement as it's optional
+      if (key === 'shipManagement') return true;
+      return validateField(key, formData[key]);
+    });
+    
+    if (isValid) {
+      try {
+        // Prepare form data for submission
+        const submitData = new FormData();
+          
+        // Include vessel data
+        const vesselData = {
+          ...formData,
+          // Handle optional shipManagement field - if it's an empty string, set it to null
+          shipManagement: formData.shipManagement || null
+        };
+          
+        submitData.append('vesselData', JSON.stringify(vesselData));
+          
+        // Add photo files
+        photos.forEach(photo => {
+          // Only add new files (existing ones don't have a file property)
+          if (photo.file) {
+            submitData.append('media', photo.file);
+          }
+        });
+          
+        // Add video files
+        videos.forEach(video => {
+          // Only add new files (existing ones don't have a file property)
+          if (video.file) {
+            submitData.append('media', video.file);
+          }
+        });
+          
+        // Add certificate files
+        certificates.forEach(certificate => {
+          // Only add new files (existing ones don't have a file property)
+          if (certificate.file) {
+            submitData.append('media', certificate.file);
+          }
+        });
+          
+        // Add media to delete if we're editing an existing vessel
+        if (mediaToDelete.length > 0 && vessel) {
+          submitData.append('mediaToDelete', JSON.stringify(mediaToDelete));
+        }
+          
+        // Clear any previous errors
+        setError('');
+          
+        // Call the onSave function with the FormData
+        await onSave(submitData, true); // true indicates multipart form data
+      } catch (error) {
+        console.error('Error saving vessel:', error);
+          
+        // Handle and display error messages
+        let errorMsg = 'Failed to save vessel. Please try again.';
+        if (error.response?.data) {
+          if (error.response.data.msg) {
+            errorMsg = error.response.data.msg;
+          } else if (error.response.data.message) {
+            errorMsg = error.response.data.message;
+          }
+            
+          // Add specific validation errors if present
+          if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+            errorMsg += ': ' + error.response.data.errors.join(', ');
+          }
+        } else if (error.message) {
+          errorMsg = error.message;
+        }
+          
+        setError(errorMsg);
+      }
+    }
+  };
+
+  // Cleanup function when modal closes
+  const handleModalClose = () => {
+    setError('');
+    setPhotos([]);
+    setVideos([]);
+    setCertificates([]);
+    setMediaToDelete([]);
+    onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
         <div className="mt-3">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
+          <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-300">
+            <h3 className="text-2xl font-bold text-gray-900">
               {vessel ? 'Edit Ship' : 'Add New Ship'}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={handleModalClose} className="text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Ship Name *</label>
-                <input type="text" name="name" value={formData.name} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.name && errors.name ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`} />
-                {touched.name && errors.name && (<p className="mt-1 text-sm text-red-600">{errors.name}</p>)}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Add New Ship</h2>
+              <p className="mt-2 text-gray-600">Please provide the ship information</p>
+            </div>
+            
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">IMO Number *</label>
-                <input type="text" name="imo" value={formData.imo} onChange={handleChange} onBlur={handleBlur} placeholder="IMO 1234567" required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.imo && errors.imo ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`} />
-                {touched.imo && errors.imo && (<p className="mt-1 text-sm text-red-600">{errors.imo}</p>)}
+            )}
+
+            {/* Ship Details Section */}
+            <div className="bg-gray-50 rounded-lg p-4 shadow-sm mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Ship Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Ship Name *</label>
+                  <input type="text" name="name" value={formData.name} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.name && errors.name ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`} />
+                  {touched.name && errors.name && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.name}</p>)}
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">IMO Number *</label>
+                  <input type="text" name="imo" value={formData.imo} onChange={handleChange} onBlur={handleBlur} placeholder="IMO 1234567" required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.imo && errors.imo ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`} />
+                  {touched.imo && errors.imo && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.imo}</p>)}
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Ship Type *</label>
+                  <select name="vesselType" value={formData.vesselType} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.vesselType && errors.vesselType ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`}>
+                    {vesselTypes.map(type => (<option key={type} value={type}>{type}</option>))}
+                  </select>
+                  {touched.vesselType && errors.vesselType && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.vesselType}</p>)}
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Flag Country *</label>
+                  <input type="text" name="flag" value={formData.flag} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.flag && errors.flag ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`} />
+                  {touched.flag && errors.flag && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.flag}</p>)}
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Year Built *</label>
+                  <input type="number" name="yearBuilt" value={formData.yearBuilt} onChange={handleChange} onBlur={handleBlur} min="1900" max={new Date().getFullYear()} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.yearBuilt && errors.yearBuilt ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`} />
+                  {touched.yearBuilt && errors.yearBuilt && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.yearBuilt}</p>)}
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Gross Tonnage *</label>
+                  <input type="number" name="grossTonnage" value={formData.grossTonnage} onChange={handleChange} onBlur={handleBlur} min="1" required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue text-base py-2 px-3 ${touched.grossTonnage && errors.grossTonnage ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-2 border-gray-300'}`} />
+                  {touched.grossTonnage && errors.grossTonnage && (<p className="mt-1 text-sm text-red-600 font-medium">{errors.grossTonnage}</p>)}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Ship Type *</label>
-                <select name="vesselType" value={formData.vesselType} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.vesselType && errors.vesselType ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`}>
-                  {vesselTypes.map(type => (<option key={type} value={type}>{type}</option>))}
-                </select>
-                {touched.vesselType && errors.vesselType && (<p className="mt-1 text-sm text-red-600">{errors.vesselType}</p>)}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Flag Country *</label>
-                <input type="text" name="flag" value={formData.flag} onChange={handleChange} onBlur={handleBlur} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.flag && errors.flag ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`} />
-                {touched.flag && errors.flag && (<p className="mt-1 text-sm text-red-600">{errors.flag}</p>)}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Year Built *</label>
-                <input type="number" name="yearBuilt" value={formData.yearBuilt} onChange={handleChange} onBlur={handleBlur} min="1900" max={new Date().getFullYear()} required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.yearBuilt && errors.yearBuilt ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`} />
-                {touched.yearBuilt && errors.yearBuilt && (<p className="mt-1 text-sm text-red-600">{errors.yearBuilt}</p>)}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Gross Tonnage *</label>
-                <input type="number" name="grossTonnage" value={formData.grossTonnage} onChange={handleChange} onBlur={handleBlur} min="1" required className={`mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue ${touched.grossTonnage && errors.grossTonnage ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`} />
-                {touched.grossTonnage && errors.grossTonnage && (<p className="mt-1 text-sm text-red-600">{errors.grossTonnage}</p>)}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-5">
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Length (m)</label>
+                  <input type="number" name="length" value={formData.dimensions.length} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue border-2 border-gray-300 text-base py-2 px-3" />
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Beam (m)</label>
+                  <input type="number" name="beam" value={formData.dimensions.beam} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue border-2 border-gray-300 text-base py-2 px-3" />
+                </div>
+                <div>
+                  <label className="block text-base font-medium text-gray-800 mb-1">Draft (m)</label>
+                  <input type="number" name="draft" value={formData.dimensions.draft} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-marine-blue focus:border-marine-blue border-2 border-gray-300 text-base py-2 px-3" />
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Length (m)</label>
-                <input type="number" name="length" value={formData.dimensions.length} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300" />
+            {/* File Upload Section */}
+            <div className="border-t border-gray-300 pt-6 mt-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Ship Media & Certificates</h4>
+              
+              {/* Photo Upload */}
+              <div className="mb-6">
+                <label className="block text-base font-medium text-gray-800 mb-2">Ship Photos</label>
+                <div className="flex items-center">
+                  <label className="bg-marine-blue text-white px-4 py-2 rounded-md cursor-pointer hover:bg-marine-dark transition-colors shadow-sm">
+                    <span>Select Photos</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*" 
+                      onChange={handlePhotoUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                  <span className="ml-3 text-sm text-gray-600">
+                    {photos.length} photo(s) selected (max 10, 5MB each)
+                  </span>
+                </div>
+                
+                {/* Photo Previews */}
+                {photos.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {photos.map((photo, index) => (
+                      <div key={index} className="relative">
+                        {photo.data ? (
+                          <img 
+                            src={photo.data} 
+                            alt={photo.name} 
+                            className="w-full h-28 object-cover rounded-md border-2 border-gray-300 shadow-sm"
+                          />
+                        ) : (
+                          <img 
+                            src={photo.url} 
+                            alt={photo.name} 
+                            className="w-full h-28 object-cover rounded-md border-2 border-gray-300 shadow-sm"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 shadow-md"
+                        >
+                          ×
+                        </button>
+                        <p className="text-xs text-gray-700 mt-1 truncate font-medium">{photo.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Beam (m)</label>
-                <input type="number" name="beam" value={formData.dimensions.beam} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300" />
+              
+              {/* Video Upload */}
+              <div className="mb-6">
+                <label className="block text-base font-medium text-gray-800 mb-2">Ship Videos</label>
+                <div className="flex items-center">
+                  <label className="bg-marine-blue text-white px-4 py-2 rounded-md cursor-pointer hover:bg-marine-dark transition-colors shadow-sm">
+                    <span>Select Videos</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="video/*" 
+                      onChange={handleVideoUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                  <span className="ml-3 text-sm text-gray-600">
+                    {videos.length} video(s) selected (max 5, 50MB each)
+                  </span>
+                </div>
+                
+                {/* Video Previews */}
+                {videos.length > 0 && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {videos.map((video, index) => (
+                      <div key={index} className="relative">
+                        {video.data ? (
+                          <div className="w-full h-28 bg-gray-200 rounded-md flex items-center justify-center border-2 border-gray-300 shadow-sm">
+                            <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        ) : (
+                          // For existing videos, show a thumbnail or icon with link
+                          <div className="w-full h-28 bg-gray-200 rounded-md flex items-center justify-center border-2 border-gray-300 shadow-sm">
+                            <a href={video.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center">
+                              <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              <span className="text-xs text-gray-600 mt-1">View Video</span>
+                            </a>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeVideo(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 shadow-md"
+                        >
+                          ×
+                        </button>
+                        <p className="text-xs text-gray-700 mt-1 truncate font-medium">{video.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Draft (m)</label>
-                <input type="number" name="draft" value={formData.dimensions.draft} onChange={handleDimensionChange} className="mt-1 block w-full rounded-md shadow-sm focus:ring-marine-blue focus:border-marine-blue border-gray-300" />
+              
+              {/* Certificate Upload */}
+              <div className="mb-6">
+                <label className="block text-base font-medium text-gray-800 mb-2">Ship Certificates</label>
+                <div className="flex items-center">
+                  <label className="bg-marine-blue text-white px-4 py-2 rounded-md cursor-pointer hover:bg-marine-dark transition-colors shadow-sm">
+                    <span>Select Certificates</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept=".pdf,.jpg,.jpeg,.png" 
+                      onChange={handleCertificateUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                  <span className="ml-3 text-sm text-gray-600">
+                    {certificates.length} certificate(s) selected (max 10, 10MB each)
+                  </span>
+                </div>
+                
+                {/* Certificate Previews */}
+                {certificates.length > 0 && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {certificates.map((certificate, index) => (
+                      <div key={index} className="relative bg-gray-50 p-3 rounded-md border-2 border-gray-300 shadow-sm">
+                        <div className="flex items-center">
+                          <svg className="w-8 h-8 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{certificate.name}</p>
+                            {certificate.size ? (
+                              <p className="text-xs text-gray-500">{(certificate.size / 1024 / 1024).toFixed(2)} MB</p>
+                            ) : (
+                              <p className="text-xs text-gray-500">Existing Certificate</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeCertificate(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 shadow-md"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1179,9 +1759,9 @@ function VesselModal({ vessel, onSave, onClose }) {
               <p className="mt-1 text-xs text-gray-500">Assign a ship management company to enable service requests routing.</p>
             </div> */}
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue">Cancel</button>
-              <button type="submit" className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue">{vessel ? 'Update Ship' : 'Add Ship'}</button>
+            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-300">
+              <button type="button" onClick={handleModalClose} className="px-6 py-3 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue transition-colors">Cancel</button>
+              <button type="submit" className="px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-marine-blue hover:bg-marine-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue transition-colors">{vessel ? 'Update Ship' : 'Add Ship'}</button>
             </div>
           </form>
         </div>

@@ -18,38 +18,12 @@ console.log('NODE_ENV:', process.env.NODE_ENV || 'Not set');
 
 const app = express();
 
-// Explicitly set CORS headers (before other middleware)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  console.log('Request origin:', origin);
-  console.log('FRONTEND_URL from env:', process.env.FRONTEND_URL);
-  
-  // Set CORS headers
-  if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
-    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
-  } else if (!origin || origin === 'http://localhost:3000') {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
-  } else {
-    // For debugging, allow the requesting origin
-    res.header('Access-Control-Allow-Origin', origin);
-  }
-  
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
-  }
-  
-  next();
-});
-
-// Configure CORS for Render deployment
+// Configure CORS for local development and Render deployment
 const allowedOrigins = [
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:5173', // Vite development server
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173'
 ];
 
 // Add FRONTEND_URL if it exists
@@ -72,17 +46,21 @@ const corsOptions = {
     } else {
       console.log('CORS: Blocking origin', origin);
       console.log('Allowed origins:', allowedOrigins);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true); // Temporarily allow all for development
     }
   },
   credentials: true,
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware (this will work with our explicit headers above)
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Add this for form data
+
+// Serve static files for vessel media
+app.use('/uploads/vessels', express.static(path.join(__dirname, 'uploads/vessels')));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

@@ -57,7 +57,14 @@ router.post('/', auth, async (req, res) => {
     });
 
     const populated = await ServiceRequest.findById(request._id)
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email');
 
@@ -84,7 +91,14 @@ router.get('/', auth, async (req, res) => {
 
     const requests = await ServiceRequest.find(query)
       .sort({ createdAt: -1 })
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email')
       .populate('decisionBy', 'name email');
@@ -100,7 +114,14 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const request = await ServiceRequest.findById(req.params.id)
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email')
       .populate('decisionBy', 'name email');
@@ -159,7 +180,14 @@ router.post('/:id/accept', auth, async (req, res) => {
     await request.save();
 
     const populated = await ServiceRequest.findById(request._id)
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email')
       .populate('decisionBy', 'name email');
@@ -207,7 +235,14 @@ router.post('/:id/decline', auth, async (req, res) => {
     await request.save();
 
     const populated = await ServiceRequest.findById(request._id)
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email')
       .populate('decisionBy', 'name email');
@@ -282,7 +317,14 @@ router.put('/:id', auth, async (req, res) => {
     await request.save();
 
     const populated = await ServiceRequest.findById(request._id)
-      .populate('vessel', 'name imo')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .populate('owner', 'name email')
       .populate('shipCompany', 'name email')
       .populate('decisionBy', 'name email');

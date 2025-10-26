@@ -15,10 +15,12 @@ export const useFirebaseAuth = () => {
 const syncUserWithBackend = async (firebaseUser) => {
   // Ensure axios has baseURL configured (avoid race with AuthProvider)
   if (!axios.defaults.baseURL) {
-    if (process.env.REACT_APP_API_URL) {
+    if (process.env.NODE_ENV === 'production' && process.env.REACT_APP_API_URL) {
       axios.defaults.baseURL = process.env.REACT_APP_API_URL;
     } else {
-      axios.defaults.baseURL = 'http://localhost:5000';
+      // For development, let the proxy handle API requests
+      // Remove any existing baseURL to ensure proxy is used
+      delete axios.defaults.baseURL;
     }
   }
 
@@ -68,10 +70,12 @@ export const FirebaseAuthProvider = ({ children }) => {
   // Ensure axios baseURL is set early
   useEffect(() => {
     if (!axios.defaults.baseURL) {
-      if (process.env.REACT_APP_API_URL) {
+      if (process.env.NODE_ENV === 'production' && process.env.REACT_APP_API_URL) {
         axios.defaults.baseURL = process.env.REACT_APP_API_URL;
       } else {
-        axios.defaults.baseURL = 'http://localhost:5000';
+        // For development, let the proxy handle API requests
+        // Remove any existing baseURL to ensure proxy is used
+        delete axios.defaults.baseURL;
       }
     }
   }, []);
@@ -101,7 +105,7 @@ export const FirebaseAuthProvider = ({ children }) => {
   // Keep backend session in sync when Firebase auth state changes
   useEffect(() => {
     const unsub = onAuthStateChange(async (firebaseUser) => {
-      if (!firebaseUser) return; // signed out handled by AuthContext
+      if (!firebaseUser) return; // signed out handled by AuthProvider
       if (syncingRef.current) return;
       syncingRef.current = true;
       try {

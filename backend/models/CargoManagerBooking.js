@@ -44,6 +44,11 @@ const cargoManagerBookingSchema = new mongoose.Schema({
     required: [true, 'Vessel name is required'],
     trim: true
   },
+  shipType: {
+    type: String,
+    required: false,
+    enum: ['Bulk Carrier', 'Container Ship', 'Tanker', 'Passenger Ship', 'Fishing Vessel', 'Other']
+  },
   status: {
     type: String,
     enum: ['Pending', 'Accepted', 'Declined'],

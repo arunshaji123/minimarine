@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SurveyorBooking, User, Vessel } = require('../models');
+const { SurveyorBooking, User, Vessel, ServiceRequest } = require('../models');
 const auth = require('../middleware/auth');
 
 // @route   GET api/surveyor-bookings
@@ -35,7 +35,14 @@ router.get('/', auth, async (req, res) => {
     const bookings = await SurveyorBooking.find(query)
       .populate('surveyor', 'name email')
       .populate('bookedBy', 'name email')
-      .populate('vessel', 'name imo vesselType')
+      .populate({
+        path: 'vessel',
+        select: 'name imo vesselType media',
+        populate: {
+          path: 'media',
+          select: 'type url fileName fileSize mimeType uploadedAt'
+        }
+      })
       .sort({ inspectionDate: -1, createdAt: -1 });
 
     res.json(bookings);
@@ -105,7 +112,14 @@ router.put('/:id', auth, async (req, res) => {
     )
     .populate('surveyor', 'name email')
     .populate('bookedBy', 'name email')
-    .populate('vessel', 'name imo vesselType');
+    .populate({
+      path: 'vessel',
+      select: 'name imo vesselType media',
+      populate: {
+        path: 'media',
+        select: 'type url fileName fileSize mimeType uploadedAt'
+      }
+    });
 
     res.json(booking);
   } catch (err) {
@@ -124,7 +138,7 @@ router.post('/', auth, async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized to create surveyor bookings' });
     }
 
-    const {
+    let {
       surveyorId,
       inspectionDate,
       inspectionTime,
@@ -135,11 +149,23 @@ router.post('/', auth, async (req, res) => {
       vesselName,
       notes,
       specialRequirements,
-      estimatedDuration
+      estimatedDuration,
+      serviceRequestId
     } = req.body;
 
+    // If booking is from a service request, auto-populate shipType from the service request
+    if (serviceRequestId) {
+      const serviceRequest = await ServiceRequest.findById(serviceRequestId)
+        .populate('vessel', 'vesselType');
+      
+      if (serviceRequest && serviceRequest.vessel && serviceRequest.vessel.vesselType) {
+        shipType = serviceRequest.vessel.vesselType;
+      }
+    }
+
     // Validate required fields
-    if (!surveyorId || !inspectionDate || !inspectionTime || !shipType || !surveyType || !location || !vesselName) {
+    // If booking is from a service request, shipType is auto-populated, so it's not required in the request body
+    if (!surveyorId || !inspectionDate || !inspectionTime || !surveyType || !location || !vesselName || (!serviceRequestId && !shipType)) {
       return res.status(400).json({ msg: 'Please provide all required fields' });
     }
 
@@ -175,7 +201,14 @@ router.post('/', auth, async (req, res) => {
     const booking = await newBooking.save();
     await booking.populate('surveyor', 'name email');
     await booking.populate('bookedBy', 'name email');
-    await booking.populate('vessel', 'name imo vesselType');
+    await booking.populate({
+      path: 'vessel',
+      select: 'name imo vesselType media',
+      populate: {
+        path: 'media',
+        select: 'type url fileName fileSize mimeType uploadedAt'
+      }
+    });
 
     res.json(booking);
   } catch (err) {

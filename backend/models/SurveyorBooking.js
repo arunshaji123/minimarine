@@ -22,7 +22,7 @@ const surveyorBookingSchema = new mongoose.Schema({
   shipType: {
     type: String,
     required: [true, 'Ship type is required'],
-    enum: ['Container', 'Bulk Carrier', 'Tanker', 'Cargo Ship', 'Passenger Ship', 'Other']
+    enum: ['Bulk Carrier', 'Container Ship', 'Tanker', 'Passenger Ship', 'Fishing Vessel', 'Other', 'Cargo Ship']
   },
   surveyType: {
     type: String,
@@ -118,5 +118,3 @@ surveyorBookingSchema.index({ inspectionDate: 1 });
 const SurveyorBooking = mongoose.model('SurveyorBooking', surveyorBookingSchema);
 
 module.exports = SurveyorBooking;
-
-

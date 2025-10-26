@@ -125,6 +125,23 @@ npm run server
 npm run client
 ```
 
+## Local Development
+
+For detailed instructions on setting up and running the application locally for development, see [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
+
+### Quick Start for Local Development
+
+1. Make sure MongoDB is running or MongoDB Atlas URI is configured in `backend/.env`
+2. Install dependencies: `npm run install-all`
+3. Start both services: `npm run dev`
+4. Access the application at http://localhost:3000
+
+### Testing Changes Locally
+
+- Changes to frontend code will automatically reload in the browser
+- Changes to backend code will automatically restart the server
+- No need to redeploy to Render for local testing
+
 ## Usage
 
 1. **Access the Application**
@@ -197,136 +214,3 @@ POST /api/auth/login
 - Protected routes requiring authentication
 
 ## Customization
-
-### Styling
-- Modify `frontend/src/index.css` for global styles
-- Update `frontend/tailwind.config.js` for Tailwind customization
-- Colors can be changed in the Tailwind config
-
-### Adding New Features
-- Add new routes in `backend/routes/`
-- Create new React components in `frontend/src/components/`
-- Update the database models in `backend/models/`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **MongoDB Connection Error**
-   - Ensure MongoDB is running
-   - Check the connection string in `.env`
-   - Verify network connectivity for Atlas
-
-2. **Port Already in Use**
-   - Change the PORT in `backend/.env`
-   - Kill processes using the ports: `npx kill-port 3000 5000`
-
-3. **CORS Issues**
-   - Ensure the proxy is set in `frontend/package.json`
-   - Check CORS configuration in `backend/server.js`
-
-4. **JWT Token Issues**
-   - Clear localStorage in browser
-   - Check JWT_SECRET in environment variables
-
-## Development
-
-### Adding New Components
-```bash
-# Create new component
-touch frontend/src/components/NewComponent.js
-```
-
-### Adding New API Routes
-```bash
-# Create new route file
-touch backend/routes/newRoute.js
-```
-
-### Database Operations
-```javascript
-// Example: Add new field to User model
-// Update backend/models/User.js
-```
-
-## Production Deployment
-
-### Deploying to Render
-
-1. **Prepare Your Repository**
-   - Push your code to a GitHub repository
-   - Ensure all files are committed
-
-2. **Set up MongoDB Atlas**
-   - Create a MongoDB Atlas account
-   - Create a new cluster
-   - Get your connection string
-   - Note down the connection string for later use
-
-3. **Deploy Backend to Render**
-   - Go to https://dashboard.render.com
-   - Click "New" → "Web Service"
-   - Connect your GitHub repository
-   - Set the following:
-     - Name: `marine-survey-backend`
-     - Root Directory: `backend`
-     - Runtime: `Node`
-     - Build Command: `npm install`
-     - Start Command: `npm start`
-   - Add Environment Variables:
-     - `NODE_ENV`: `production`
-     - `MONGODB_URI`: `your_mongodb_atlas_connection_string`
-     - `JWT_SECRET`: `your_secure_random_string`
-     - `PORT`: `10000`
-     - `FRONTEND_URL`: `https://your-frontend-service.onrender.com`
-   - Click "Create Web Service"
-
-4. **Deploy Frontend to Render**
-   - Go to https://dashboard.render.com
-   - Click "New" → "Static Site"
-   - Connect your GitHub repository
-   - Set the following:
-     - Name: `marine-survey-frontend`
-     - Build Command: `npm install && npm run build`
-     - Publish Directory: `build`
-   - Add Environment Variables:
-     - `REACT_APP_API_URL`: `https://your-backend-service.onrender.com/api`
-   - Click "Create Static Site"
-
-5. **Update Environment Variables**
-   - Once your backend service is deployed, get its URL
-   - Update the `FRONTEND_URL` in your backend service with the frontend URL
-   - Update the `REACT_APP_API_URL` in your frontend service with the backend URL
-
-### Manual Deployment
-
-1. **Environment Variables**
-   - Set secure JWT_SECRET
-   - Use production MongoDB URI
-   - Set NODE_ENV=production
-
-2. **Build Frontend**
-   ```bash
-   cd frontend
-   npm run build
-   ```
-
-3. **Deploy**
-   - Deploy backend to services like Heroku, Railway, or DigitalOcean
-   - Deploy frontend to Netlify, Vercel, or serve from Express
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For support or questions, please create an issue in the repository or contact the development team.

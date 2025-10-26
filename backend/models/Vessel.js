@@ -80,6 +80,27 @@ const vesselSchema = new mongoose.Schema({
       default: 'Valid'
     }
   }],
+  // Media files for the vessel
+  media: [{
+    type: {
+      type: String,
+      enum: ['photo', 'video', 'certificate'],
+      required: true
+    },
+    url: {
+      type: String,
+      required: true
+    },
+    thumbnailUrl: String,
+    fileName: String,
+    fileSize: Number,
+    mimeType: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    description: String
+  }],
   createdAt: {
     type: Date,
     default: Date.now

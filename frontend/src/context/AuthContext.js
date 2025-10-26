@@ -19,11 +19,14 @@ export const AuthProvider = ({ children }) => {
 
   // Configure axios baseURL when API URL is provided
   useEffect(() => {
-    if (process.env.REACT_APP_API_URL) {
+    // In development, we want to use the proxy, so we don't set a baseURL
+    // In production, we use the REACT_APP_API_URL
+    if (process.env.NODE_ENV === 'production' && process.env.REACT_APP_API_URL) {
       axios.defaults.baseURL = process.env.REACT_APP_API_URL;
     } else {
-      // Use relative URLs to leverage proxy
-      axios.defaults.baseURL = '/api';
+      // For development, let the proxy handle API requests
+      // Remove any existing baseURL to ensure proxy is used
+      delete axios.defaults.baseURL;
     }
   }, []);
   

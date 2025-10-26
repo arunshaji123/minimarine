@@ -1416,6 +1416,46 @@ export default function ShipManagementDashboard() {
                       <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
                     </div>
                   )}
+                  
+                  {/* Vessel Media Section for Surveyor Booking */}
+                  {detailsModal.booking?.vessel?.media && detailsModal.booking.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Ship Media & Certificates</div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {detailsModal.booking.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {detailsModal.booking.vessel.media.length} media file(s) uploaded for this vessel
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1463,6 +1503,46 @@ export default function ShipManagementDashboard() {
                     <div className="sm:col-span-2">
                       <div className="text-gray-500">Special Requirements</div>
                       <div className="text-gray-900 whitespace-pre-wrap">{detailsModal.booking?.specialRequirements}</div>
+                    </div>
+                  )}
+                  
+                  {/* Vessel Media Section for Cargo Manager Booking */}
+                  {detailsModal.booking?.vessel?.media && detailsModal.booking.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <div className="text-gray-500">Ship Media & Certificates</div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {detailsModal.booking.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {detailsModal.booking.vessel.media.length} media file(s) uploaded for this vessel
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1612,6 +1692,46 @@ export default function ShipManagementDashboard() {
                       <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Decision Note</label>
                       <p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
                         {serviceRequestDetailsModal.request.decisionNote}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Vessel Media Section */}
+                  {serviceRequestDetailsModal.request.vessel?.media && serviceRequestDetailsModal.request.vessel.media.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider">Ship Media & Certificates</label>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {serviceRequestDetailsModal.request.vessel.media.map((media, index) => (
+                          <div key={index} className="relative">
+                            {media.type === 'photo' ? (
+                              <img 
+                                src={media.url} 
+                                alt={`Vessel media ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-md border border-gray-200"
+                              />
+                            ) : media.type === 'certificate' ? (
+                              <div className="w-full h-24 bg-red-50 rounded-md border border-red-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs text-red-600 mt-1 truncate px-1">{media.fileName || 'Certificate'}</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 bg-gray-100 rounded-md border border-gray-200 flex flex-col items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs text-gray-600 mt-1 truncate px-1">{media.fileName || 'Video'}</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                              {media.type.charAt(0).toUpperCase() + media.type.slice(1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        {serviceRequestDetailsModal.request.vessel.media.length} media file(s) uploaded for this vessel
                       </p>
                     </div>
                   )}
