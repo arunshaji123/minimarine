@@ -21,7 +21,7 @@ const surveyorBookingSchema = new mongoose.Schema({
   },
   shipType: {
     type: String,
-    required: [true, 'Ship type is required'],
+    required: false,
     enum: ['Bulk Carrier', 'Container Ship', 'Tanker', 'Passenger Ship', 'Fishing Vessel', 'Other', 'Cargo Ship']
   },
   surveyType: {
@@ -101,6 +101,10 @@ const surveyorBookingSchema = new mongoose.Schema({
   },
   assignedAt: {
     type: Date
+  },
+  deletionReason: {
+    type: String,
+    trim: true
   }
 });
 

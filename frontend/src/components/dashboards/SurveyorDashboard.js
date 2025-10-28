@@ -65,6 +65,18 @@ export default function SurveyorDashboard() {
     loadCompletedSurveys(); // Add this line to load completed surveys
   }, []);
 
+  // Check for deletion notifications
+  useEffect(() => {
+    // Check if any bookings have deletion reasons and show notifications
+    if (bookings && bookings.length > 0) {
+      bookings.forEach(booking => {
+        if (booking.deletionReason) {
+          warning(`Booking for ${booking.vesselName} was deleted. Reason: ${booking.deletionReason}`);
+        }
+      });
+    }
+  }, [bookings]);
+
   // Add this new function to load completed surveys
   const loadCompletedSurveys = async () => {
     try {
@@ -88,6 +100,8 @@ export default function SurveyorDashboard() {
     } catch (err) {
       console.error('Error loading completed surveys:', err);
       // Don't set error state here as it's not critical
+      // Set empty array to prevent undefined errors
+      setRecentReports([]);
     }
   };
 

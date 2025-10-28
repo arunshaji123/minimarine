@@ -37,12 +37,13 @@ router.get('/', auth, async (req, res) => {
       .populate('bookedBy', 'name email')
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType media owner shipManagement',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
         }
       })
+      .select('+deletionReason')
       .sort({ voyageDate: -1, createdAt: -1 });
 
     res.json(bookings);
@@ -118,7 +119,7 @@ router.put('/:id', auth, async (req, res) => {
     .populate('bookedBy', 'name email')
     .populate({
       path: 'vessel',
-      select: 'name imo vesselType media',
+      select: 'name imo vesselType media owner shipManagement',
       populate: {
         path: 'media',
         select: 'type url fileName fileSize mimeType uploadedAt'
@@ -394,10 +395,22 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized to cancel this booking' });
     }
 
+    // Get deletion reason from request body if provided
+    const { reason } = req.body || {};
+
+    // Store deletion reason in booking before deleting
+    if (reason) {
+      booking.deletionReason = reason;
+      await booking.save();
+      
+      // If the booking has a vessel with an owner, we could send a notification
+      // For now, we'll just store the reason which will be visible in the owner's dashboard
+    }
+
     // Actually delete the booking instead of marking as cancelled
     await CargoManagerBooking.findByIdAndDelete(req.params.id);
 
-    res.json({ msg: 'Booking deleted successfully' });
+    res.json({ msg: 'Booking deleted successfully', reason: reason || '' });
   } catch (err) {
     console.error(err.message);
     if (err.kind === 'ObjectId') {

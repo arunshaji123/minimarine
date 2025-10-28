@@ -114,6 +114,10 @@ const cargoManagerBookingSchema = new mongoose.Schema({
   }],
   assignedAt: {
     type: Date
+  },
+  deletionReason: {
+    type: String,
+    trim: true
   }
 });
 
@@ -131,5 +135,3 @@ cargoManagerBookingSchema.index({ voyageDate: 1 });
 const CargoManagerBooking = mongoose.model('CargoManagerBooking', cargoManagerBookingSchema);
 
 module.exports = CargoManagerBooking;
-
-

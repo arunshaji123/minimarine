@@ -3,12 +3,14 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import UserProfileModal from '../UserProfileModal.jsx';
 import CargoFormModal from '../modals/CargoFormModal';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 export default function CargoManagerDashboard() {
   const { user } = useAuth();
+  const { warning } = useToast();
   const [showProfile, setShowProfile] = useState(false);
   const [activeCargo, setActiveCargo] = useState([]);
   const [cargoDocuments, setCargoDocuments] = useState([]);
@@ -82,6 +84,18 @@ export default function CargoManagerDashboard() {
     loadVessels();
     loadBookings();
   }, []);
+
+  // Check for deletion notifications
+  useEffect(() => {
+    // Check if any bookings have deletion reasons and show notifications
+    if (bookings && bookings.length > 0) {
+      bookings.forEach(booking => {
+        if (booking.deletionReason) {
+          warning(`Booking for ${booking.vesselName} was deleted. Reason: ${booking.deletionReason}`);
+        }
+      });
+    }
+  }, [bookings]);
 
   // Reload vessels when modal opens
   useEffect(() => {

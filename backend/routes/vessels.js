@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Vessel } = require('../models');
+const { Vessel, ServiceRequest } = require('../models');
 const auth = require('../middleware/auth');
 
 // Configure multer for file uploads
@@ -70,7 +70,8 @@ router.get('/', auth, async (req, res) => {
       query.owner = req.user.id;
     } else if (req.user.role === 'ship_management') {
       // Ship management can see vessels they manage OR own
-      // Use $or with proper MongoDB syntax
+      // BUT NOT vessels that have ACCEPTED service requests (to keep fleet management section clean)
+      
       query = {
         $or: [
           { shipManagement: req.user.id },

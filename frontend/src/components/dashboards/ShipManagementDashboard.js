@@ -35,8 +35,80 @@ export default function ShipManagementDashboard() {
 
   const [detailsModal, setDetailsModal] = useState({ open: false, type: null, booking: null });
   
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    bookingId: null,
+    bookingType: null,
+    reason: ''
+  });
+
+  const handleDeleteSurveyorBooking = async (bookingId, bookingStatus) => {
+    // For all bookings, show confirmation with reason input
+    setDeleteModal({
+      open: true,
+      bookingId: bookingId,
+      bookingType: 'surveyor',
+      reason: ''
+    });
+  };
+
+  const handleDeleteCargoManagerBooking = async (bookingId, bookingStatus) => {
+    // For all bookings, show confirmation with reason input
+    setDeleteModal({
+      open: true,
+      bookingId: bookingId,
+      bookingType: 'cargo',
+      reason: ''
+    });
+  };
+
+  const confirmDeleteBooking = async () => {
+    if (!deleteModal.reason.trim()) {
+      setError('Please provide a reason for deletion');
+      return;
+    }
+    
+    try {
+      setBookingsLoading(true);
+      setDeleteModal({ open: false, bookingId: null, bookingType: null, reason: '' });
+      
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      // Include the reason in the request
+      const deleteData = { reason: deleteModal.reason.trim() };
+      
+      if (deleteModal.bookingType === 'surveyor') {
+        await axios.delete(`/api/surveyor-bookings/${deleteModal.bookingId}`, {
+          ...config,
+          data: deleteData
+        });
+        setSuccessMessage('Surveyor booking deleted successfully!');
+      } else {
+        await axios.delete(`/api/cargo-manager-bookings/${deleteModal.bookingId}`, {
+          ...config,
+          data: deleteData
+        });
+        setSuccessMessage('Cargo manager booking deleted successfully!');
+      }
+      
+      loadBookings();
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting booking:', err);
+      setError('Failed to delete booking');
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const cancelDeleteBooking = () => {
+    setDeleteModal({ open: false, bookingId: null, bookingType: null, reason: '' });
+  };
+
   // Assignment functionality removed as per requirements
-  
+
   // Maintenance schedule and crew assignments state
   const [maintenanceSchedule, setMaintenanceSchedule] = useState([]);
   const [crewAssignments, setCrewAssignments] = useState([]);
@@ -99,7 +171,15 @@ export default function ShipManagementDashboard() {
       const response = await axios.get('/api/vessels');
       console.log('Vessels loaded:', response.data.length, 'vessels');
       console.log('Vessels data:', response.data);
-      setVessels(response.data);
+      
+      // Filter vessels to only show those created by the ship management company
+      // (where shipManagement equals current user's ID or user is the owner)
+      const filteredVessels = response.data.filter(vessel => 
+        (vessel.shipManagement && vessel.shipManagement._id === user.id) ||
+        (vessel.owner && vessel.owner._id === user.id)
+      );
+      
+      setVessels(filteredVessels);
     } catch (err) {
       console.error('Error loading vessels:', err);
       setError('Failed to load ships');
@@ -199,28 +279,6 @@ export default function ShipManagementDashboard() {
     setShowSurveyorBookingModal(true);
   };
 
-  const handleDeleteSurveyorBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this surveyor booking?')) {
-      return;
-    }
-    
-    try {
-      setBookingsLoading(true);
-      const token = localStorage.getItem('token');
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      
-      await axios.delete(`/surveyor-bookings/${bookingId}`, config);
-      setSuccessMessage('Surveyor booking deleted successfully!');
-      loadBookings();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error deleting surveyor booking:', err);
-      setError('Failed to delete surveyor booking');
-    } finally {
-      setBookingsLoading(false);
-    }
-  };
-
   const handleCargoManagerBooking = async (bookingData) => {
     try {
       const token = localStorage.getItem('token');
@@ -255,28 +313,6 @@ export default function ShipManagementDashboard() {
   const handleEditCargoManagerBooking = (booking) => {
     setEditingCargoManagerBooking(booking);
     setShowCargoManagerBookingModal(true);
-  };
-
-  const handleDeleteCargoManagerBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this cargo manager booking?')) {
-      return;
-    }
-    
-    try {
-      setBookingsLoading(true);
-      const token = localStorage.getItem('token');
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      
-      await axios.delete(`/cargo-manager-bookings/${bookingId}`, config);
-      setSuccessMessage('Cargo manager booking deleted successfully!');
-      loadBookings();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      console.error('Error deleting cargo manager booking:', err);
-      setError('Failed to delete cargo manager booking');
-    } finally {
-      setBookingsLoading(false);
-    }
   };
 
   const handleAddVessel = async (vesselData) => {
@@ -1031,7 +1067,7 @@ export default function ShipManagementDashboard() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteSurveyorBooking(booking._id);
+                              handleDeleteSurveyorBooking(booking._id, booking.status);
                             }}
                             className="text-red-600 hover:text-red-800"
                             title="Delete booking"
@@ -1160,7 +1196,7 @@ export default function ShipManagementDashboard() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteCargoManagerBooking(booking._id);
+                              handleDeleteCargoManagerBooking(booking._id, booking.status);
                             }}
                             className="text-red-600 hover:text-red-800"
                             title="Delete booking"
@@ -1799,6 +1835,63 @@ export default function ShipManagementDashboard() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Confirmation Modal */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+                <button
+                  onClick={cancelDeleteBooking}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">
+                  Are you sure you want to delete this {deleteModal.bookingType === 'surveyor' ? 'surveyor' : 'cargo manager'} booking? 
+                  This reason will be visible to the {deleteModal.bookingType === 'surveyor' ? 'surveyor' : 'cargo manager'} in their notifications.
+                </p>
+                
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">Reason for deletion *</label>
+                  <textarea
+                    value={deleteModal.reason}
+                    onChange={(e) => setDeleteModal(prev => ({ ...prev, reason: e.target.value }))}
+                    rows={4}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-marine-blue focus:ring-marine-blue sm:text-sm"
+                    placeholder="Enter reason for deletion..."
+                    required
+                  />
+                </div>
+                
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={cancelDeleteBooking}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-marine-blue"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteBooking}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  >
+                    Delete Booking
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -1,13 +1,29 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
   const [formData, setFormData] = useState({
+    hullInspection: 0,
+    deckSuperstructure: 0,
+    machineryEngineRoom: 0,
+    electricalSystems: 0,
+    safetyEquipment: 0,
+    navigationEquipment: 0,
+    pollutionControlSystems: 0,
+    certificatesVerification: 0,
     findings: '',
     recommendations: '',
     notes: ''
   });
 
   const [uploading, setUploading] = useState(false);
+
+  // Handle star rating changes
+  const handleRatingChange = (field, rating) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: rating
+    }));
+  };
 
   // Handle text inputs
   const handleChange = (e) => {
@@ -35,6 +51,14 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
       
       const surveyData = {
         surveyId: survey.id || survey._id,
+        hullInspection: formData.hullInspection,
+        deckSuperstructure: formData.deckSuperstructure,
+        machineryEngineRoom: formData.machineryEngineRoom,
+        electricalSystems: formData.electricalSystems,
+        safetyEquipment: formData.safetyEquipment,
+        navigationEquipment: formData.navigationEquipment,
+        pollutionControlSystems: formData.pollutionControlSystems,
+        certificatesVerification: formData.certificatesVerification,
         findings: formData.findings,
         recommendations: formData.recommendations,
         notes: formData.notes,
@@ -85,13 +109,47 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
       if (onSurveySubmitted) onSurveySubmitted();
       
       // Reset form
-      setFormData({ findings: '', recommendations: '', notes: '' });
+      setFormData({ 
+        hullInspection: 0,
+        deckSuperstructure: 0,
+        machineryEngineRoom: 0,
+        electricalSystems: 0,
+        safetyEquipment: 0,
+        navigationEquipment: 0,
+        pollutionControlSystems: 0,
+        certificatesVerification: 0,
+        findings: '', 
+        recommendations: '', 
+        notes: '' 
+      });
     } catch (error) {
       console.error('Error submitting survey:', error);
       alert(error.message || 'Failed to submit survey report. Please try again.');
     } finally {
       setUploading(false);
     }
+  };
+
+  // Star Rating Component
+  const StarRating = ({ rating, onRatingChange, fieldName }) => {
+    return (
+      <div className="flex space-x-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => onRatingChange(fieldName, star)}
+            className="text-2xl focus:outline-none"
+          >
+            {star <= rating ? (
+              <span className="text-yellow-400">★</span>
+            ) : (
+              <span className="text-gray-300">☆</span>
+            )}
+          </button>
+        ))}
+      </div>
+    );
   };
 
   if (!isOpen) return null;
@@ -122,7 +180,102 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Text Inputs */}
+            {/* 5-Star Rating Sections - New Fields at Top */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Inspection Ratings</h3>
+              
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Hull Inspection
+                  </label>
+                  <StarRating 
+                    rating={formData.hullInspection} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="hullInspection" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Deck & Superstructure
+                  </label>
+                  <StarRating 
+                    rating={formData.deckSuperstructure} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="deckSuperstructure" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Machinery & Engine Room
+                  </label>
+                  <StarRating 
+                    rating={formData.machineryEngineRoom} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="machineryEngineRoom" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Electrical Systems
+                  </label>
+                  <StarRating 
+                    rating={formData.electricalSystems} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="electricalSystems" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Safety Equipment
+                  </label>
+                  <StarRating 
+                    rating={formData.safetyEquipment} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="safetyEquipment" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Navigation Equipment
+                  </label>
+                  <StarRating 
+                    rating={formData.navigationEquipment} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="navigationEquipment" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pollution Control Systems
+                  </label>
+                  <StarRating 
+                    rating={formData.pollutionControlSystems} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="pollutionControlSystems" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Certificates Verification
+                  </label>
+                  <StarRating 
+                    rating={formData.certificatesVerification} 
+                    onRatingChange={handleRatingChange} 
+                    fieldName="certificatesVerification" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Text Inputs - Moved to Bottom */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Findings *

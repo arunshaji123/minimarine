@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -14,6 +15,7 @@ import ServiceRequestModal from '../modals/ServiceRequestModal';
 
 export default function OwnerDashboard() {
   const { user } = useAuth();
+  const { warning } = useToast();
   const [vessels, setVessels] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [maintenance, setMaintenance] = useState([]);
@@ -98,6 +100,23 @@ export default function OwnerDashboard() {
     
     fetchData();
   }, []);
+
+  // Check for deletion notifications
+  useEffect(() => {
+    // Check surveyor bookings for deletion reasons
+    surveyorBookings.forEach(booking => {
+      if (booking.deletionReason) {
+        warning(`Surveyor booking for ${booking.vessel?.name || booking.vesselName} was deleted. Reason: ${booking.deletionReason}`);
+      }
+    });
+    
+    // Check cargo manager bookings for deletion reasons
+    cargoManagerBookings.forEach(booking => {
+      if (booking.deletionReason) {
+        warning(`Cargo manager booking for ${booking.vessel?.name || booking.vesselName} was deleted. Reason: ${booking.deletionReason}`);
+      }
+    });
+  }, [surveyorBookings, cargoManagerBookings, warning]);
 
   // Calculate statistics
   const stats = {

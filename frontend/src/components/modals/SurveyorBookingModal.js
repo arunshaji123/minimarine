@@ -33,7 +33,6 @@ const SurveyorBookingModal = ({
           surveyorId: booking.surveyor?._id || '',
           inspectionDate: booking.inspectionDate ? new Date(booking.inspectionDate).toISOString().split('T')[0] : '',
           inspectionTime: booking.inspectionTime || '',
-          shipType: booking.shipType || '',
           surveyType: booking.surveyType || '',
           location: booking.location || '',
           vesselId: booking.vesselId || (booking.vessel ? booking.vessel._id : ''),
@@ -48,7 +47,6 @@ const SurveyorBookingModal = ({
           surveyorId: '',
           inspectionDate: '',
           inspectionTime: '',
-          shipType: serviceRequestVessel.vesselType || '',
           surveyType: '',
           location: '',
           vesselId: serviceRequestVessel._id,
@@ -62,7 +60,6 @@ const SurveyorBookingModal = ({
           surveyorId: '',
           inspectionDate: '',
           inspectionTime: '',
-          shipType: '',
           surveyType: '',
           location: '',
           vesselId: '',
@@ -128,9 +125,7 @@ const SurveyorBookingModal = ({
       case 'location':
         if (!value) error = 'Location is required';
         break;
-      case 'shipType':
-        if (!fromServiceRequest && !value) error = 'Ship type is required';
-        break;
+
       case 'vesselId':
         if (!fromServiceRequest && !value) error = 'Please select a ship';
         break;
@@ -155,6 +150,7 @@ const SurveyorBookingModal = ({
     });
     setTouched(allTouched);
     
+    // Validate all fields
     const isValid = Object.keys(formData).every(key => validateField(key, formData[key]));
     
     if (isValid) {
@@ -242,43 +238,6 @@ const SurveyorBookingModal = ({
                   <p className="mt-1 text-sm text-red-600">{errors.inspectionTime}</p>
                 )}
               </div>
-              {!fromServiceRequest && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Ship Type *</label>
-                  <select
-                    name="shipType"
-                    value={formData.shipType}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    className={`mt-1 block w-full rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 ${
-                      touched.shipType && errors.shipType ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select ship type...</option>
-                    <option value="Bulk Carrier">Bulk Carrier</option>
-                    <option value="Container Ship">Container Ship</option>
-                    <option value="Tanker">Tanker</option>
-                    <option value="Passenger Ship">Passenger Ship</option>
-                    <option value="Fishing Vessel">Fishing Vessel</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {touched.shipType && errors.shipType && (
-                    <p className="mt-1 text-sm text-red-600">{errors.shipType}</p>
-                  )}
-                </div>
-              )}
-              {fromServiceRequest && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Ship Type</label>
-                  <input
-                    type="text"
-                    name="shipType"
-                    value={formData.shipType}
-                    readOnly
-                    className="mt-1 block w-full rounded-md shadow-sm bg-gray-100 border-gray-300"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -333,7 +292,11 @@ const SurveyorBookingModal = ({
                         setFormData(prev => ({ ...prev, vesselId: '', vesselName: '' }));
                       } else {
                         const v = vessels.find(v => String(v._id) === String(selectedId));
-                        setFormData(prev => ({ ...prev, vesselId: selectedId, vesselName: v ? v.name : '' }));
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          vesselId: selectedId, 
+                          vesselName: v ? v.name : ''
+                        }));
                       }
                       if (errors.vesselId) {
                         setErrors(prev => ({ ...prev, vesselId: '' }));
