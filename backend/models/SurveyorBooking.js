@@ -27,7 +27,7 @@ const surveyorBookingSchema = new mongoose.Schema({
   surveyType: {
     type: String,
     required: [true, 'Survey type is required'],
-    enum: ['Annual', 'Intermediate', 'Drydock', 'Special', 'Renewal']
+    enum: ['Annual', 'Intermediate', 'Drydock', 'Special', 'Renewal', 'Premium Quality']
   },
   location: {
     type: String,

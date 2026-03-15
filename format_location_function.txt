@@ -1,0 +1,15 @@
+  const formatLocation = (location) => {
+    if (!location) return 'Location not specified';
+    if (location.port) {
+      return `${location.port}${location.country ? `, ${location.country}` : ''}`;
+    }
+    return 'Location not specified';
+  }; 
+  const formatLocation = (location) => { 
+    if (!location) return 'Location not specified'; 
+    if (location.port) { 
+      return `${location.port}${location.country ? `, ${location.country}` : ''}`; 
+    } 
+    return 'Location not specified'; 
+  }; 
+ 

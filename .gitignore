@@ -83,6 +83,7 @@ jspm_packages/
 .idea/
 *.swp
 *.swo
+*.md
 
 # OS generated files
 .DS_Store

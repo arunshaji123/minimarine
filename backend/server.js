@@ -68,6 +68,7 @@ app.use('/api/auth', require('./routes/firebase-auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/vessels', require('./routes/vessels'));
 app.use('/api/surveys', require('./routes/surveys'));
+app.use('/api/knn', require('./routes/knn'));
 app.use('/api/cargo', require('./routes/cargo'));
 app.use('/api/shipments', require('./routes/shipments'));
 app.use('/api/maintenance', require('./routes/maintenance'));
@@ -78,6 +79,8 @@ app.use('/api/surveyor-bookings', require('./routes/surveyor-bookings'));
 app.use('/api/cargo-manager-bookings', require('./routes/cargo-manager-bookings'));
 app.use('/api/service-requests', require('./routes/service-requests'));
 app.use('/api/owner-bookings', require('./routes/owner-bookings'));
+app.use('/api/certificates', require('./routes/certificates'));
+app.use('/api/reports', require('./routes/reports'));
 
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {

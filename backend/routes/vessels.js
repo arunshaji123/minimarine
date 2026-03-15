@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { Vessel, ServiceRequest } = require('../models');
 const auth = require('../middleware/auth');
+const { knnCache } = require('./knn'); // Import the KNN cache
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -68,22 +69,13 @@ router.get('/', auth, async (req, res) => {
     if (req.user.role === 'owner') {
       // Owners can only see their own vessels
       query.owner = req.user.id;
-    } else if (req.user.role === 'ship_management') {
-      // Ship management can see vessels they manage OR own
-      // BUT NOT vessels that have ACCEPTED service requests (to keep fleet management section clean)
-      
-      query = {
-        $or: [
-          { shipManagement: req.user.id },
-          { owner: req.user.id }
-        ]
-      };
     }
-    // Admin, surveyor, and cargo_manager can see all vessels
+    // Ship management, admin, surveyor, and cargo_manager can see ALL vessels in the system
+    // This allows ship management to have a complete ship registry for management purposes
     
     const vessels = await Vessel.find(query)
-      .populate('owner', 'name email')
-      .populate('shipManagement', 'name email');
+      .populate('owner', 'name email role')
+      .populate('shipManagement', 'name email role');
       
     res.json(vessels);
   } catch (err) {
@@ -278,6 +270,12 @@ router.put('/:id', auth, upload.array('media', 15), async (req, res) => {
       { $set: vesselData },
       { new: true }
     );
+    
+    // Clear KNN cache for this vessel since vessel data changed
+    if (knnCache) {
+      const cacheKey = `vessel_${req.params.id}`;
+      knnCache.delete(cacheKey);
+    }
 
     res.json(vessel);
   } catch (err) {
@@ -316,6 +314,13 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     await vessel.remove();
+    
+    // Clear KNN cache for this vessel since it was deleted
+    if (knnCache) {
+      const cacheKey = `vessel_${req.params.id}`;
+      knnCache.delete(cacheKey);
+    }
+    
     res.json({ msg: 'Vessel removed' });
   } catch (err) {
     console.error(err.message);

@@ -9,7 +9,7 @@ const auth = require('../middleware/auth');
 router.get('/', async (req, res) => {
   try {
     const shipments = await Shipment.find({})
-      .populate('vessel', 'name imo vesselType')
+      .populate('vessel', 'name imo vesselType vesselId')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
       
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id)
-      .populate('vessel', 'name imo vesselType flag')
+      .populate('vessel', 'name imo vesselType flag vesselId')
       .populate('createdBy', 'name email');
     
     if (!shipment) {
@@ -85,7 +85,7 @@ router.post('/', async (req, res) => {
     const shipment = await newShipment.save();
     
     // Populate the response
-    await shipment.populate('vessel', 'name imo vesselType');
+    await shipment.populate('vessel', 'name imo vesselType vesselId');
     await shipment.populate('createdBy', 'name email');
     
     res.json(shipment);
@@ -128,7 +128,7 @@ router.put('/:id', async (req, res) => {
       req.params.id,
       { $set: req.body },
       { new: true, runValidators: true }
-    ).populate('vessel', 'name imo vesselType')
+    ).populate('vessel', 'name imo vesselType vesselId')
      .populate('createdBy', 'name email');
 
     res.json(shipment);

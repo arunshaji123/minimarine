@@ -25,7 +25,7 @@ router.get('/', auth, async (req, res) => {
     // Admin, surveyor, and cargo_manager can see all maintenance records
     
     const maintenance = await Maintenance.find(query)
-      .populate('vessel', 'name imoNumber')
+      .populate('vessel', 'name imoNumber vesselId')
       .populate('assignedTo', 'name email')
       .populate('createdBy', 'name email')
       .sort({ scheduledDate: 1 });
@@ -43,7 +43,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const maintenance = await Maintenance.findById(req.params.id)
-      .populate('vessel', 'name imoNumber')
+      .populate('vessel', 'name imoNumber vesselId')
       .populate('assignedTo', 'name email')
       .populate('createdBy', 'name email');
     

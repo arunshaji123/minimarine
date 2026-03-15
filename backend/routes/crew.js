@@ -25,7 +25,7 @@ router.get('/', auth, async (req, res) => {
     // Admin, surveyor, and cargo_manager can see all crew records
     
     const crew = await Crew.find(query)
-      .populate('vessel', 'name imoNumber')
+      .populate('vessel', 'name imoNumber vesselId')
       .sort({ name: 1 });
       
     res.json(crew);
@@ -41,7 +41,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const crew = await Crew.findById(req.params.id)
-      .populate('vessel', 'name imoNumber');
+      .populate('vessel', 'name imoNumber vesselId');
     
     if (!crew) {
       return res.status(404).json({ msg: 'Crew record not found' });

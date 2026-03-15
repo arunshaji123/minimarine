@@ -42,6 +42,19 @@ router.get('/', auth, requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/users/surveyors - get all surveyors (accessible to authenticated users)
+router.get('/surveyors', auth, async (req, res) => {
+  try {
+    const surveyors = await User.find({ role: 'surveyor', status: 'active' })
+      .select('name email')
+      .sort({ name: 1 });
+    res.json(surveyors);
+  } catch (err) {
+    console.error('Get surveyors error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // GET /api/users/:id - get single user (admin only)
 router.get('/:id', auth, requireAdmin, async (req, res) => {
   try {

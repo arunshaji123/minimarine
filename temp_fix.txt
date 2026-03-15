@@ -1,0 +1,1 @@
+<div className="text-sm text-gray-500">{survey.location?.port ? `${survey.location.port}${survey.location.country ? `, ${survey.location.country}` : ''}` : 'Location not specified'}</div>

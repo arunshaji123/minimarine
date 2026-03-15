@@ -13,6 +13,7 @@ import OwnerDashboard from './components/dashboards/OwnerDashboard';
 import SurveyorDashboard from './components/dashboards/SurveyorDashboard';
 import CargoManagerDashboard from './components/dashboards/CargoManagerDashboard';
 import DocumentManager from './components/DocumentManager';
+import PremiumInspection from './components/PremiumInspection';
 
 import { Role, getDashboardPathByRole } from './utils/roles';
 
@@ -72,6 +73,9 @@ function App() {
               <Route path="/dashboard/owner" element={<RoleRoute roles={[Role.OWNER, Role.USER]}><OwnerDashboard /></RoleRoute>} />
               <Route path="/dashboard/surveyor" element={<RoleRoute roles={[Role.SURVEYOR]}><SurveyorDashboard /></RoleRoute>} />
               <Route path="/dashboard/cargo" element={<RoleRoute roles={[Role.CARGO_MANAGER]}><CargoManagerDashboard /></RoleRoute>} />
+              
+              {/* Premium Inspection */}
+              <Route path="/premium-inspection/:surveyId" element={<RoleRoute roles={[Role.SURVEYOR]}><PremiumInspection /></RoleRoute>} />
               
               {/* Document Management */}
               <Route path="/documents" element={<ProtectedRoute><DocumentManager /></ProtectedRoute>} />

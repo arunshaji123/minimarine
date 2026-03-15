@@ -216,7 +216,7 @@ const CargoManagerBookingModal = ({
                 <option value="">Choose a cargo manager...</option>
                 {cargoManagers.map(manager => (
                   <option key={manager._id} value={manager._id}>
-                    {manager.name} ({manager.email})
+                    {manager.name}
                   </option>
                 ))}
               </select>

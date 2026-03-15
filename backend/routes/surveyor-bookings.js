@@ -37,7 +37,7 @@ router.get('/', auth, async (req, res) => {
       .populate('bookedBy', 'name email')
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media owner shipManagement',
+        select: 'name imo vesselType vesselId media owner shipManagement',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -115,12 +115,12 @@ router.put('/:id', auth, async (req, res) => {
     .populate('bookedBy', 'name email')
     .populate({
       path: 'vessel',
-      select: 'name imo vesselType media owner shipManagement',
+      select: 'name imo vesselType vesselId media owner shipManagement',
       populate: {
         path: 'media',
         select: 'type url fileName fileSize mimeType uploadedAt'
       }
-    });
+    })
 
     res.json(booking);
   } catch (err) {
@@ -209,7 +209,7 @@ router.post('/', auth, async (req, res) => {
     await booking.populate('bookedBy', 'name email');
     await booking.populate({
       path: 'vessel',
-      select: 'name imo vesselType media',
+      select: 'name imo vesselType vesselId media',
       populate: {
         path: 'media',
         select: 'type url fileName fileSize mimeType uploadedAt'
@@ -258,7 +258,7 @@ router.put('/:id/accept', auth, async (req, res) => {
 
     await booking.populate('surveyor', 'name email');
     await booking.populate('bookedBy', 'name email');
-    await booking.populate('vessel', 'name imo vesselType');
+    await booking.populate('vessel', 'name imo vesselType vesselId');
 
     res.json(booking);
   } catch (err) {
@@ -301,7 +301,7 @@ router.put('/:id/decline', auth, async (req, res) => {
 
     await booking.populate('surveyor', 'name email');
     await booking.populate('bookedBy', 'name email');
-    await booking.populate('vessel', 'name imo vesselType');
+    await booking.populate('vessel', 'name imo vesselType vesselId');
 
     res.json(booking);
   } catch (err) {
@@ -394,7 +394,7 @@ router.put('/:id/assign', auth, async (req, res) => {
 
     await booking.populate('surveyor', 'name email');
     await booking.populate('bookedBy', 'name email');
-    await booking.populate('vessel', 'name imo vesselType');
+    await booking.populate('vessel', 'name imo vesselType vesselId');
 
     res.json(booking);
   } catch (err) {

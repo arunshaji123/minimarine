@@ -15,6 +15,7 @@ const SurveyorBookingModal = ({
     inspectionDate: '',
     inspectionTime: '',
     surveyType: '',
+    shipType: '',
     location: '',
     vesselId: '',
     vesselName: '',
@@ -34,6 +35,7 @@ const SurveyorBookingModal = ({
           inspectionDate: booking.inspectionDate ? new Date(booking.inspectionDate).toISOString().split('T')[0] : '',
           inspectionTime: booking.inspectionTime || '',
           surveyType: booking.surveyType || '',
+          shipType: booking.shipType || '',
           location: booking.location || '',
           vesselId: booking.vesselId || (booking.vessel ? booking.vessel._id : ''),
           vesselName: booking.vesselName || (booking.vessel ? booking.vessel.name : ''),
@@ -48,6 +50,7 @@ const SurveyorBookingModal = ({
           inspectionDate: '',
           inspectionTime: '',
           surveyType: '',
+          shipType: serviceRequestVessel.vesselType || '',
           location: '',
           vesselId: serviceRequestVessel._id,
           vesselName: serviceRequestVessel.name,
@@ -61,6 +64,7 @@ const SurveyorBookingModal = ({
           inspectionDate: '',
           inspectionTime: '',
           surveyType: '',
+          shipType: '',
           location: '',
           vesselId: '',
           vesselName: '',
@@ -196,7 +200,7 @@ const SurveyorBookingModal = ({
                 <option value="">Choose a surveyor...</option>
                 {surveyors.map(surveyor => (
                   <option key={surveyor._id} value={surveyor._id}>
-                    {surveyor.name} ({surveyor.email})
+                    {surveyor.name}
                   </option>
                 ))}
               </select>
@@ -258,6 +262,7 @@ const SurveyorBookingModal = ({
                   <option value="Drydock">Drydock</option>
                   <option value="Special">Special</option>
                   <option value="Renewal">Renewal</option>
+                  <option value="Premium Quality">Premium Quality</option>
                 </select>
                 {touched.surveyType && errors.surveyType && (
                   <p className="mt-1 text-sm text-red-600">{errors.surveyType}</p>
@@ -289,13 +294,14 @@ const SurveyorBookingModal = ({
                     onChange={(e) => {
                       const selectedId = e.target.value;
                       if (!selectedId) {
-                        setFormData(prev => ({ ...prev, vesselId: '', vesselName: '' }));
+                        setFormData(prev => ({ ...prev, vesselId: '', vesselName: '', shipType: '' }));
                       } else {
                         const v = vessels.find(v => String(v._id) === String(selectedId));
                         setFormData(prev => ({ 
                           ...prev, 
                           vesselId: selectedId, 
-                          vesselName: v ? v.name : ''
+                          vesselName: v ? v.name : '',
+                          shipType: v && v.vesselType ? v.vesselType : prev.shipType
                         }));
                       }
                       if (errors.vesselId) {

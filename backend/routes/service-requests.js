@@ -59,7 +59,7 @@ router.post('/', auth, async (req, res) => {
     const populated = await ServiceRequest.findById(request._id)
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -93,7 +93,7 @@ router.get('/', auth, async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -116,7 +116,7 @@ router.get('/:id', auth, async (req, res) => {
     const request = await ServiceRequest.findById(req.params.id)
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -182,7 +182,7 @@ router.post('/:id/accept', auth, async (req, res) => {
     const populated = await ServiceRequest.findById(request._id)
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -237,7 +237,7 @@ router.post('/:id/decline', auth, async (req, res) => {
     const populated = await ServiceRequest.findById(request._id)
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'
@@ -319,7 +319,7 @@ router.put('/:id', auth, async (req, res) => {
     const populated = await ServiceRequest.findById(request._id)
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType media',
+        select: 'name imo vesselType vesselId media',
         populate: {
           path: 'media',
           select: 'type url fileName fileSize mimeType uploadedAt'

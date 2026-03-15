@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const vesselSchema = new mongoose.Schema({
+  vesselId: {
+    type: String,
+    unique: true,
+    trim: true
+    // Note: Not required in schema as it's auto-generated in pre-save hook
+  },
   name: {
     type: String,
     required: [true, 'Vessel name is required'],
@@ -34,7 +40,7 @@ const vesselSchema = new mongoose.Schema({
     required: [true, 'Gross tonnage is required'],
     min: [1, 'Gross tonnage must be positive']
   },
-  owner: {
+    owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: [true, 'Vessel owner is required']
@@ -111,8 +117,16 @@ const vesselSchema = new mongoose.Schema({
   }
 });
 
-// Update the updatedAt field on save
+// Generate a user-friendly vessel ID before saving
 vesselSchema.pre('save', function(next) {
+  // Only generate vesselId if it doesn't exist yet
+  if (!this.vesselId) {
+    // Create a user-friendly ID based on vessel name and a random suffix
+    const baseName = this.name.replace(/\s+/g, '').substring(0, 5).toUpperCase();
+    const suffix = Math.floor(1000 + Math.random() * 9000); // 4-digit number
+    this.vesselId = `${baseName}${suffix}`;
+  }
+  
   this.updatedAt = Date.now();
   next();
 });

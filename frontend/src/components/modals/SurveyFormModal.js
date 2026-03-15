@@ -1,21 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
   const [formData, setFormData] = useState({
     hullInspection: 0,
+    hullInspectionFindings: '',
     deckSuperstructure: 0,
+    deckSuperstructureFindings: '',
     machineryEngineRoom: 0,
+    machineryEngineRoomFindings: '',
     electricalSystems: 0,
+    electricalSystemsFindings: '',
     safetyEquipment: 0,
+    safetyEquipmentFindings: '',
     navigationEquipment: 0,
+    navigationEquipmentFindings: '',
     pollutionControlSystems: 0,
+    pollutionControlSystemsFindings: '',
     certificatesVerification: 0,
+    certificatesVerificationFindings: '',
     findings: '',
     recommendations: '',
     notes: ''
   });
 
   const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' }); // For showing success/error messages
+  
+  // Debugging: Log survey data when it changes
+  useEffect(() => {
+    if (survey) {
+      console.log('Survey data received in modal:', survey);
+      console.log('Survey ID:', survey.id || survey._id);
+      console.log('Vessel Info:', survey.vesselInfo);
+    }
+  }, [survey]);
 
   // Handle star rating changes
   const handleRatingChange = (field, rating) => {
@@ -38,8 +56,11 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Clear any previous messages
+    setMessage({ type: '', text: '' });
+    
     if (!formData.findings.trim()) {
-      alert('Please enter survey findings');
+      setMessage({ type: 'error', text: 'Please enter survey findings' });
       return;
     }
 
@@ -51,14 +72,23 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
       
       const surveyData = {
         surveyId: survey.id || survey._id,
+        vessel: survey.vesselInfo?._id || survey.vessel || survey.vesselId,
         hullInspection: formData.hullInspection,
+        hullInspectionFindings: formData.hullInspectionFindings,
         deckSuperstructure: formData.deckSuperstructure,
+        deckSuperstructureFindings: formData.deckSuperstructureFindings,
         machineryEngineRoom: formData.machineryEngineRoom,
+        machineryEngineRoomFindings: formData.machineryEngineRoomFindings,
         electricalSystems: formData.electricalSystems,
+        electricalSystemsFindings: formData.electricalSystemsFindings,
         safetyEquipment: formData.safetyEquipment,
+        safetyEquipmentFindings: formData.safetyEquipmentFindings,
         navigationEquipment: formData.navigationEquipment,
+        navigationEquipmentFindings: formData.navigationEquipmentFindings,
         pollutionControlSystems: formData.pollutionControlSystems,
+        pollutionControlSystemsFindings: formData.pollutionControlSystemsFindings,
         certificatesVerification: formData.certificatesVerification,
+        certificatesVerificationFindings: formData.certificatesVerificationFindings,
         findings: formData.findings,
         recommendations: formData.recommendations,
         notes: formData.notes,
@@ -89,6 +119,14 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
         try {
           const errorData = await response.json();
           errorMessage = errorData.msg || errorData.message || errorMessage;
+          // Add more details for debugging
+          if (errorData.userId && errorData.surveyorId) {
+            errorMessage += `
+
+User ID: ${errorData.userId}
+Assigned Surveyor ID: ${errorData.surveyorId}
+User Role: ${errorData.userRole}`;
+          }
         } catch (parseError) {
           // If JSON parsing fails, use the response text
           try {
@@ -104,27 +142,40 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
       
       const result = await response.json();
       
-      alert('Survey report submitted successfully!');
-      onClose();
-      if (onSurveySubmitted) onSurveySubmitted();
+      // Show success message
+      setMessage({ type: 'success', text: 'Survey report submitted successfully!' });
+      
+      // Close the modal after a short delay
+      setTimeout(() => {
+        onClose();
+        if (onSurveySubmitted) onSurveySubmitted();
+      }, 1500);
       
       // Reset form
       setFormData({ 
         hullInspection: 0,
+        hullInspectionFindings: '',
         deckSuperstructure: 0,
+        deckSuperstructureFindings: '',
         machineryEngineRoom: 0,
+        machineryEngineRoomFindings: '',
         electricalSystems: 0,
+        electricalSystemsFindings: '',
         safetyEquipment: 0,
+        safetyEquipmentFindings: '',
         navigationEquipment: 0,
+        navigationEquipmentFindings: '',
         pollutionControlSystems: 0,
+        pollutionControlSystemsFindings: '',
         certificatesVerification: 0,
+        certificatesVerificationFindings: '',
         findings: '', 
         recommendations: '', 
         notes: '' 
       });
     } catch (error) {
       console.error('Error submitting survey:', error);
-      alert(error.message || 'Failed to submit survey report. Please try again.');
+      setMessage({ type: 'error', text: `Error: ${error.message || 'Failed to submit survey report. Please try again.'}` });
     } finally {
       setUploading(false);
     }
@@ -163,7 +214,7 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
             <div>
               <h3 className="text-xl font-semibold text-white">Survey Report</h3>
               <p className="text-sm text-green-100 mt-1">
-                {survey?.vessel} - {survey?.type}
+                {(survey?.vesselInfo?.name || survey?.vessel || survey?.vesselName) + ' - ID: ' + (survey?.vesselInfo?.vesselId || survey?.vesselId || 'N/A')} - {survey?.type}
               </p>
             </div>
             <button
@@ -177,100 +228,214 @@ const SurveyFormModal = ({ isOpen, onClose, survey, onSurveySubmitted }) => {
           </div>
         </div>
 
+        {/* Message Display */}
+        {message.text && (
+          <div className={`px-6 py-3 ${message.type === 'success' ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400'} border-l-4`}>
+            <div className={`flex items-center ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+              {message.type === 'success' ? (
+                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="font-medium">{message.text}</span>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* 5-Star Rating Sections - New Fields at Top */}
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Inspection Ratings</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Description and Quality Ratings</h3>
               
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Hull Inspection
                   </label>
-                  <StarRating 
-                    rating={formData.hullInspection} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="hullInspection" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="hullInspectionFindings"
+                      value={formData.hullInspectionFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for hull inspection..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.hullInspection} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="hullInspection" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Deck & Superstructure
                   </label>
-                  <StarRating 
-                    rating={formData.deckSuperstructure} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="deckSuperstructure" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="deckSuperstructureFindings"
+                      value={formData.deckSuperstructureFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for deck & superstructure..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.deckSuperstructure} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="deckSuperstructure" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Machinery & Engine Room
                   </label>
-                  <StarRating 
-                    rating={formData.machineryEngineRoom} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="machineryEngineRoom" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="machineryEngineRoomFindings"
+                      value={formData.machineryEngineRoomFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for machinery & engine room..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.machineryEngineRoom} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="machineryEngineRoom" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Electrical Systems
                   </label>
-                  <StarRating 
-                    rating={formData.electricalSystems} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="electricalSystems" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="electricalSystemsFindings"
+                      value={formData.electricalSystemsFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for electrical systems..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.electricalSystems} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="electricalSystems" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Safety Equipment
                   </label>
-                  <StarRating 
-                    rating={formData.safetyEquipment} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="safetyEquipment" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="safetyEquipmentFindings"
+                      value={formData.safetyEquipmentFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for safety equipment..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.safetyEquipment} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="safetyEquipment" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Navigation Equipment
                   </label>
-                  <StarRating 
-                    rating={formData.navigationEquipment} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="navigationEquipment" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="navigationEquipmentFindings"
+                      value={formData.navigationEquipmentFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for navigation equipment..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.navigationEquipment} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="navigationEquipment" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Pollution Control Systems
                   </label>
-                  <StarRating 
-                    rating={formData.pollutionControlSystems} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="pollutionControlSystems" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="pollutionControlSystemsFindings"
+                      value={formData.pollutionControlSystemsFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for pollution control systems..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.pollutionControlSystems} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="pollutionControlSystems" 
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Certificates Verification
                   </label>
-                  <StarRating 
-                    rating={formData.certificatesVerification} 
-                    onRatingChange={handleRatingChange} 
-                    fieldName="certificatesVerification" 
-                  />
+                  <div className="mt-2">
+                    <textarea
+                      name="certificatesVerificationFindings"
+                      value={formData.certificatesVerificationFindings}
+                      onChange={handleChange}
+                      rows={2}
+                      placeholder="Enter findings for certificates verification..."
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <StarRating 
+                      rating={formData.certificatesVerification} 
+                      onRatingChange={handleRatingChange} 
+                      fieldName="certificatesVerification" 
+                    />
+                  </div>
                 </div>
               </div>
             </div>

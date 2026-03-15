@@ -14,7 +14,7 @@ const surveySchema = new mongoose.Schema({
   surveyType: {
     type: String,
     required: [true, 'Survey type is required'],
-    enum: ['Annual', 'Intermediate', 'Special', 'Drydock', 'Damage', 'Pre-Purchase', 'Other']
+    enum: ['Annual', 'Intermediate', 'Special', 'Drydock', 'Damage', 'Pre-Purchase', 'Renewal', 'Other']
   },
   surveyor: {
     type: mongoose.Schema.Types.ObjectId,
@@ -43,6 +43,55 @@ const surveySchema = new mongoose.Schema({
     type: String,
     enum: ['Scheduled', 'In Progress', 'Completed', 'Cancelled', 'Postponed'],
     default: 'Scheduled'
+  },
+  // Component-specific ratings (1-5 star ratings)
+  hullInspection: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  deckSuperstructure: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  machineryEngineRoom: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  electricalSystems: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  safetyEquipment: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  navigationEquipment: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  pollutionControlSystems: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  certificatesVerification: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
   },
   findings: [{
     category: {
@@ -78,7 +127,60 @@ const surveySchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Compliance tracking data
+  complianceStatus: {
+    solas: {
+      hull: String, // 'not-compliant', 'pending', 'semi-moderate', 'moderate', 'compliant'
+      fire: String,
+      lifesaving: String,
+      navigation: String,
+      radio: String,
+      emergency: String
+    },
+    marpol: {
+      ows: String,
+      sewage: String,
+      garbage: String,
+      oilRecord: String,
+      airEmission: String
+    },
+    loadLine: {
+      freeboard: String,
+      watertight: String,
+      hullOpenings: String,
+      structural: String,
+      stability: String
+    },
+    ism: {
+      sms: String,
+      doc: String,
+      smc: String,
+      emergency: String,
+      maintenance: String,
+      crew: String
+    },
+    classification: {
+      certificate: String,
+      flagState: String,
+      surveySchedule: String,
+      hullCondition: String,
+      machineryCondition: String,
+      tankInspection: String
+    }
+  },
+  complianceSubmittedAt: Date,
+  complianceSubmittedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  // AI Damage Detection Analysis (using Mixed to avoid empty object creation)
+  aiAnalysis: {
+    type: mongoose.Schema.Types.Mixed,
+    default: undefined  // Don't create empty objects
+  },
+  sourceBookingId: String, // Reference to booking if created from AI analysis
   notes: String,
+  recommendations: String,
   createdAt: {
     type: Date,
     default: Date.now

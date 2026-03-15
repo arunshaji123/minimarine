@@ -27,7 +27,7 @@ router.get('/surveyor', auth, async (req, res) => {
       .populate('bookedBy', 'name email company')
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType',
+        select: 'name imo vesselType vesselId',
       })
       .sort({ inspectionDate: -1, createdAt: -1 });
 
@@ -62,7 +62,7 @@ router.get('/cargo', auth, async (req, res) => {
       .populate('bookedBy', 'name email company')
       .populate({
         path: 'vessel',
-        select: 'name imo vesselType',
+        select: 'name imo vesselType vesselId',
       })
       .sort({ voyageDate: -1, createdAt: -1 });
 

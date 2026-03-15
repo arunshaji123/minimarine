@@ -8,7 +8,7 @@ const { Cargo, Vessel } = require('../models');
 router.get('/', async (req, res) => {
   try {
     const cargo = await Cargo.find({})
-      .populate('vessel', 'name imo vesselType')
+      .populate('vessel', 'name imo vesselType vesselId')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
       
@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const cargo = await Cargo.findById(req.params.id)
-      .populate('vessel', 'name imo vesselType flag')
+      .populate('vessel', 'name imo vesselType flag vesselId')
       .populate('createdBy', 'name email');
     
     if (!cargo) {
