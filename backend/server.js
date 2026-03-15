@@ -39,6 +39,12 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // Allow all Vercel deployment URLs (*.vercel.app)
+    if (origin.endsWith('.vercel.app')) {
+      callback(null, true);
+      return;
+    }
+
     // Check if the origin is in our allowed list
     if (allowedOrigins.indexOf(origin) !== -1) {
       console.log('CORS: Allowing origin', origin);
@@ -46,7 +52,7 @@ const corsOptions = {
     } else {
       console.log('CORS: Blocking origin', origin);
       console.log('Allowed origins:', allowedOrigins);
-      callback(null, true); // Temporarily allow all for development
+      callback(null, true); // Allow all for broad compatibility
     }
   },
   credentials: true,
@@ -116,6 +122,12 @@ app.get('/api/test', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Only start the HTTP server when running locally (not on Vercel serverless)
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+// Export app for Vercel serverless deployment
+module.exports = app;
