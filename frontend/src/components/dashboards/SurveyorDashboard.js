@@ -8,6 +8,7 @@ import SurveyDetailsModal from '../modals/SurveyDetailsModal';
 import ComplianceReportModal from '../modals/ComplianceReportModal';
 import PremiumInspectionDetailsModal from '../modals/PremiumInspectionDetailsModal';
 import PredictiveMaintenanceTab from './PredictiveMaintenanceTab';
+import HullInspection from '../HullInspection';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
@@ -162,6 +163,7 @@ export default function SurveyorDashboard() {
   const [upcomingSurveys, setUpcomingSurveys] = useState([]);
   const [recentReports, setRecentReports] = useState([]);
   const [aiReports, setAiReports] = useState([]); // Separate state for AI reports
+  const [hullInspectionSurvey, setHullInspectionSurvey] = useState(null); // Hull inspection survey
   const [complianceIssues, setComplianceIssues] = useState([]);
   // State for compliance reports
   const [complianceReports, setComplianceReports] = useState([]);
@@ -1904,6 +1906,21 @@ export default function SurveyorDashboard() {
                                             </svg>
                                             AI Image Analysis
                                           </button>
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setHullInspectionSurvey(survey);
+                                              setActiveSection('hull-inspection');
+                                              setActionDropdownOpen(null);
+                                            }}
+                                            className="block w-full px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150 text-left flex items-center"
+                                            role="menuitem"
+                                          >
+                                            <svg className="h-4 w-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+                                            </svg>
+                                            Start Hull Inspection
+                                          </button>
                                         </>
                                       ) : (
                                         <>
@@ -1954,6 +1971,21 @@ export default function SurveyorDashboard() {
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                             </svg>
                                             AI Image Analysis
+                                          </button>
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setHullInspectionSurvey(survey);
+                                              setActiveSection('hull-inspection');
+                                              setActionDropdownOpen(null);
+                                            }}
+                                            className="block w-full px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150 text-left flex items-center"
+                                            role="menuitem"
+                                          >
+                                            <svg className="h-4 w-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+                                            </svg>
+                                            Start Hull Inspection
                                           </button>
                                         </>
                                       )}
@@ -5915,6 +5947,17 @@ export default function SurveyorDashboard() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Hull Inspection Section */}
+        {activeSection === 'hull-inspection' && (
+          <HullInspection
+            survey={hullInspectionSurvey}
+            onClose={() => {
+              setActiveSection('surveys');
+              setHullInspectionSurvey(null);
+            }}
+          />
         )}
 
         {/* AI Image Analysis Section */}
