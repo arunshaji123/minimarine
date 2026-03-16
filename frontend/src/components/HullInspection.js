@@ -331,15 +331,6 @@ export default function HullInspection({ survey, onClose, onSaveReport }) {
           </div>
         )}
 
-        {successMessage && (
-          <div className="bg-green-50 border border-green-300 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-start space-x-2">
-            <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span>{successMessage}</span>
-          </div>
-        )}
-
         {/* Results */}
         {results && results.success && (
           <div className="space-y-6">
@@ -416,7 +407,17 @@ export default function HullInspection({ survey, onClose, onSaveReport }) {
 
             {/* Annotated Image with Bounding Boxes */}
             {results.annotated_image && (
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+              <>
+                {successMessage && (
+                  <div className="bg-green-50 border border-green-300 text-green-700 px-4 py-3 rounded-lg mb-2 flex items-start space-x-2">
+                    <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{successMessage}</span>
+                  </div>
+                )}
+
+                <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
                 <div className="px-6 py-3 border-b border-gray-100 flex items-center space-x-2">
                   <svg className="h-5 w-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -447,7 +448,8 @@ export default function HullInspection({ survey, onClose, onSaveReport }) {
                     </button>
                   </div>
                 </div>
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}

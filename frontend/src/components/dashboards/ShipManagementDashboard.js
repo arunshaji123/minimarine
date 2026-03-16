@@ -308,6 +308,80 @@ export default function ShipManagementDashboard() {
   const [surveyReportModal, setSurveyReportModal] = useState({ open: false, survey: null });
   const [complianceReportModalShip, setComplianceReportModalShip] = useState({ open: false, report: null });
   const [downloadingShipReport, setDownloadingShipReport] = useState(false);
+  const [payingSurveyorId, setPayingSurveyorId] = useState(null);
+  const [paidSurveyorStatuses, setPaidSurveyorStatuses] = useState({});
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
+  const [paymentHistoryDateFilter, setPaymentHistoryDateFilter] = useState('all');
+  const [paymentHistorySurveyorFilter, setPaymentHistorySurveyorFilter] = useState('');
+
+  const loadRazorpayScript = () => {
+    if (window.Razorpay) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const loadSurveyorPaymentStatuses = async (vesselId, surveyorsData = []) => {
+    if (!vesselId) {
+      setPaidSurveyorStatuses({});
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      const response = await axios.get(`/api/payments/status/${vesselId}`, config);
+      const statuses = response.data?.paymentStatuses || [];
+
+      const statusMap = statuses.reduce((acc, status) => {
+        if (status?.surveyorId) {
+          acc[status.surveyorId] = {
+            paidAt: status.paidAt,
+            amount: status.amount,
+            currency: status.currency
+          };
+        }
+        return acc;
+      }, {});
+
+      if (Array.isArray(surveyorsData) && surveyorsData.length > 0) {
+        const filteredMap = surveyorsData.reduce((acc, surveyor) => {
+          if (surveyor?.id && statusMap[surveyor.id]) {
+            acc[surveyor.id] = statusMap[surveyor.id];
+          }
+          return acc;
+        }, {});
+        setPaidSurveyorStatuses(filteredMap);
+        return;
+      }
+
+      setPaidSurveyorStatuses(statusMap);
+    } catch (err) {
+      console.error('Error loading surveyor payment statuses:', err.message);
+      setPaidSurveyorStatuses({});
+    }
+  };
+
+  const loadPaymentHistory = async () => {
+    try {
+      setPaymentHistoryLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      const response = await axios.get('/api/payments/history?limit=100', config);
+      setPaymentHistory(response.data?.payments || []);
+    } catch (err) {
+      console.error('Error loading payment history:', err.message);
+      setPaymentHistory([]);
+    } finally {
+      setPaymentHistoryLoading(false);
+    }
+  };
 
   // Helper function to get overall compliance status
   const getOverallComplianceStatus = (complianceStatus) => {
@@ -339,6 +413,7 @@ export default function ShipManagementDashboard() {
   // Load ship details for ship finder
   const loadShipDetails = async (vessel) => {
     setShipDetailsLoading(true);
+    setPaidSurveyorStatuses({});
     try {
       // Fetch all related data in parallel
       const [surveysRes, certificatesRes, complianceRes] = await Promise.all([
@@ -363,6 +438,7 @@ export default function ShipManagementDashboard() {
           if (!surveyorSet.has(surveyorId)) {
             surveyorSet.add(surveyorId);
             surveyorsData.push({
+              id: surveyorId,
               name: survey.surveyor.name || survey.surveyor.fullName || 'Unknown',
               email: survey.surveyor.email || '',
               licenseNumber: survey.surveyor.licenseNumber || survey.surveyor.certificationNumber || ''
@@ -407,6 +483,8 @@ export default function ShipManagementDashboard() {
         complianceReports: complianceRes.data || [],
         maintenancePredictions: maintenancePredictions
       });
+
+      await loadSurveyorPaymentStatuses(vessel._id, surveyorsData);
     } catch (err) {
       console.error('Error loading ship details:', err);
       setError('Failed to load complete ship details');
@@ -417,6 +495,7 @@ export default function ShipManagementDashboard() {
         complianceReports: [],
         maintenancePredictions: []
       });
+      setPaidSurveyorStatuses({});
     } finally {
       setShipDetailsLoading(false);
     }
@@ -458,6 +537,116 @@ export default function ShipManagementDashboard() {
       setError('Failed to download ship report. Please try again.');
     } finally {
       setDownloadingShipReport(false);
+    }
+  };
+
+  const handlePaySurveyor = async (surveyor) => {
+    if (!selectedShipForDetails?._id || !surveyor?.id) {
+      setError('Missing vessel or surveyor details for payment');
+      return;
+    }
+
+    const isSdkLoaded = await loadRazorpayScript();
+    if (!isSdkLoaded) {
+      setError('Razorpay SDK failed to load. Please check your internet connection.');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    const defaultAmount = Number(process.env.REACT_APP_TEST_SURVEYOR_PAYMENT_AMOUNT || 100);
+
+    const latestSurvey = shipDetailsData?.surveys?.find((survey) => {
+      const surveyorId = typeof survey.surveyor === 'object'
+        ? (survey.surveyor._id || survey.surveyor.id)
+        : survey.surveyor;
+      return surveyorId === surveyor.id;
+    });
+
+    if (paidSurveyorStatuses[surveyor.id]) {
+      setSuccessMessage(`Payment already completed for ${surveyor.name}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      return;
+    }
+
+    try {
+      setPayingSurveyorId(surveyor.id);
+
+      let keyId = (process.env.REACT_APP_RAZORPAY_KEY_ID || '').trim();
+
+      if (!keyId) {
+        try {
+          const configRes = await axios.get('/api/payments/config', config);
+          keyId = (configRes.data?.keyId || '').trim();
+        } catch (configErr) {
+          console.warn('Could not fetch Razorpay config from backend:', configErr.message);
+        }
+      }
+
+      if (!keyId) {
+        keyId = 'rzp_test_RP6aD2gNdAuoRE';
+      }
+
+      const orderRes = await axios.post('/api/payments/create-order', {
+        vesselId: selectedShipForDetails._id,
+        surveyorId: surveyor.id,
+        surveyId: latestSurvey?._id,
+        amount: defaultAmount
+      }, config);
+
+      const order = orderRes.data?.order;
+      if (!order?.id) {
+        setError('Failed to create Razorpay order');
+        return;
+      }
+
+      const razorpayOptions = {
+        key: keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Marine Survey Payments',
+        description: `Surveyor payment for ${selectedShipForDetails.name}`,
+        order_id: order.id,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || ''
+        },
+        theme: {
+          color: '#4f46e5'
+        },
+        handler: async (response) => {
+          const verifyRes = await axios.post('/api/payments/verify', {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature
+          }, config);
+
+          setPaidSurveyorStatuses((prev) => ({
+            ...prev,
+            [surveyor.id]: {
+              paidAt: verifyRes.data?.payment?.paidAt || new Date().toISOString(),
+              amount: verifyRes.data?.payment?.amount || defaultAmount,
+              currency: verifyRes.data?.payment?.currency || 'INR'
+            }
+          }));
+
+          setSuccessMessage(`Payment successful for ${surveyor.name}`);
+          setTimeout(() => setSuccessMessage(null), 3000);
+
+          await loadPaymentHistory();
+        }
+      };
+
+      const razorpay = new window.Razorpay(razorpayOptions);
+      razorpay.on('payment.failed', () => {
+        setError(`Payment failed for ${surveyor.name}`);
+      });
+      razorpay.open();
+    } catch (err) {
+      console.error('Error during surveyor payment:', err);
+      setError(err.response?.data?.msg || 'Failed to process surveyor payment');
+    } finally {
+      setPayingSurveyorId(null);
     }
   };
 
@@ -615,6 +804,7 @@ export default function ShipManagementDashboard() {
       loadSurveys();
       loadComplianceReports();
       loadCertificates();
+      loadPaymentHistory();
     };
     loadData();
   }, []);
@@ -1293,6 +1483,7 @@ export default function ShipManagementDashboard() {
                             loadShipDetails(vessel);
                           } else {
                             setShipDetailsData(null);
+                            setPaidSurveyorStatuses({});
                           }
                         }}
                         className="w-full px-5 py-4 border-2 border-indigo-300 rounded-xl focus:ring-4 focus:ring-indigo-200 focus:border-indigo-600 text-base font-medium bg-white shadow-md hover:shadow-lg transition-all duration-300 appearance-none cursor-pointer"
@@ -1543,15 +1734,48 @@ export default function ShipManagementDashboard() {
                           <p className="text-sm text-gray-500 text-center py-4">No surveyors have inspected this vessel yet</p>
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {shipDetailsData.surveyors.map((surveyor, index) => (
-                              <div key={index} className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                                <p className="text-sm font-semibold text-gray-900">{surveyor.name}</p>
-                                <p className="text-xs text-gray-600">{surveyor.email}</p>
-                                {surveyor.licenseNumber && (
-                                  <p className="text-xs text-gray-500 mt-1">License: {surveyor.licenseNumber}</p>
-                                )}
+                            {shipDetailsData.surveyors.map((surveyor, index) => {
+                              const paymentStatus = paidSurveyorStatuses[surveyor.id];
+                              const isPaymentCompleted = Boolean(paymentStatus);
+
+                              return (
+                              <div key={surveyor.id || index} className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900">{surveyor.name}</p>
+                                    <p className="text-xs text-gray-600">{surveyor.email}</p>
+                                    {surveyor.licenseNumber && (
+                                      <p className="text-xs text-gray-500 mt-1">License: {surveyor.licenseNumber}</p>
+                                    )}
+                                    {isPaymentCompleted && (
+                                      <div className="mt-2 space-y-1">
+                                        <p className="text-xs font-semibold text-green-700">
+                                          Payment Completed
+                                        </p>
+                                        <p className="text-xs text-gray-600">
+                                          Paid on {paymentStatus?.paidAt ? new Date(paymentStatus.paidAt).toLocaleString() : 'N/A'}
+                                        </p>
+                                        <p className="text-xs text-gray-600">
+                                          Amount: ₹{Number(paymentStatus?.amount || 0).toFixed(2)} {paymentStatus?.currency || 'INR'}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePaySurveyor(surveyor)}
+                                    disabled={!surveyor.id || payingSurveyorId === surveyor.id || isPaymentCompleted}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg text-white disabled:opacity-60 disabled:cursor-not-allowed ${
+                                      isPaymentCompleted
+                                        ? 'bg-green-600'
+                                        : 'bg-indigo-600 hover:bg-indigo-700'
+                                    }`}
+                                  >
+                                    {payingSurveyorId === surveyor.id ? 'Processing...' : isPaymentCompleted ? 'Payment Completed' : 'Pay Surveyor'}
+                                  </button>
+                                </div>
                               </div>
-                            ))}
+                            )})}
                           </div>
                         )}
                       </div>
@@ -1837,6 +2061,157 @@ export default function ShipManagementDashboard() {
                         })}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment History Section */}
+            <div className="mb-6">
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-green-50 border-b-2 border-emerald-200">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center">
+                      <svg className="w-6 h-6 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1V4a1 1 0 10-2 0v1H7V4a1 1 0 10-2 0v1H4z" />
+                      </svg>
+                      <h3 className="text-xl font-bold text-gray-900">Payment History</h3>
+                    </div>
+                    {/* Filters row */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Date filter */}
+                      <div className="flex rounded-lg overflow-hidden border border-emerald-300 text-xs font-semibold">
+                        {[['all','All Time'],['today','Today'],['7','Last 7 Days'],['30','Last 30 Days']].map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setPaymentHistoryDateFilter(val)}
+                            className={`px-3 py-1.5 transition-colors ${
+                              paymentHistoryDateFilter === val
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-white text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Surveyor filter */}
+                      <select
+                        value={paymentHistorySurveyorFilter}
+                        onChange={(e) => setPaymentHistorySurveyorFilter(e.target.value)}
+                        className="text-xs border border-emerald-300 rounded-lg px-3 py-1.5 bg-white text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      >
+                        <option value="">All Surveyors</option>
+                        {Array.from(
+                          new Map(
+                            paymentHistory
+                              .filter(p => p.surveyor?._id)
+                              .map(p => [p.surveyor._id, p.surveyor.name])
+                          ).entries()
+                        ).map(([id, name]) => (
+                          <option key={id} value={id}>{name}</option>
+                        ))}
+                      </select>
+                      {/* Refresh */}
+                      <button
+                        onClick={loadPaymentHistory}
+                        title="Refresh"
+                        className="p-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </div>
+                    <span className="text-sm text-gray-500 ml-auto">
+                      {(() => {
+                        const now = new Date();
+                        return paymentHistory.filter(p => {
+                          const paid = p.paidAt ? new Date(p.paidAt) : null;
+                          const dateOk = !paid ? false
+                            : paymentHistoryDateFilter === 'today' ? paid.toDateString() === now.toDateString()
+                            : paymentHistoryDateFilter === '7' ? (now - paid) <= 7 * 86400000
+                            : paymentHistoryDateFilter === '30' ? (now - paid) <= 30 * 86400000
+                            : true;
+                          const surveyorOk = !paymentHistorySurveyorFilter || p.surveyor?._id === paymentHistorySurveyorFilter;
+                          return dateOk && surveyorOk;
+                        }).length;
+                      })()} result(s)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  {paymentHistoryLoading ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+                      <p className="mt-2 text-sm text-gray-500">Loading payment history...</p>
+                    </div>
+                  ) : (() => {
+                    const now = new Date();
+                    const filtered = paymentHistory.filter(p => {
+                      const paid = p.paidAt ? new Date(p.paidAt) : null;
+                      const dateOk = !paid ? false
+                        : paymentHistoryDateFilter === 'today' ? paid.toDateString() === now.toDateString()
+                        : paymentHistoryDateFilter === '7' ? (now - paid) <= 7 * 86400000
+                        : paymentHistoryDateFilter === '30' ? (now - paid) <= 30 * 86400000
+                        : true;
+                      const surveyorOk = !paymentHistorySurveyorFilter || p.surveyor?._id === paymentHistorySurveyorFilter;
+                      return dateOk && surveyorOk;
+                    });
+
+                    return filtered.length === 0 ? (
+                      <div className="text-center py-8">
+                        <svg className="w-14 h-14 text-gray-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1H8a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-gray-600 font-medium">
+                          {paymentHistory.length === 0 ? 'No completed payments yet' : 'No payments match the selected filters'}
+                        </p>
+                        <p className="text-gray-400 text-sm mt-1">
+                          {paymentHistory.length === 0
+                            ? 'Completed surveyor payments will appear here'
+                            : 'Try adjusting the date or surveyor filter'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Surveyor</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Vessel</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid At</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment ID</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {filtered.map((payment) => (
+                              <tr key={payment._id} className="hover:bg-emerald-50 transition-colors">
+                                <td className="px-4 py-3">
+                                  <p className="text-sm font-semibold text-gray-900">{payment.surveyor?.name || 'Unknown Surveyor'}</p>
+                                  <p className="text-xs text-gray-500">{payment.surveyor?.email || ''}</p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="text-sm font-medium text-gray-900">{payment.vessel?.name || 'Unknown Vessel'}</p>
+                                  <p className="text-xs text-gray-500">{payment.vessel?.vesselId || payment.vessel?.imo || ''}</p>
+                                </td>
+                                <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+                                  ₹{Number(payment.amount || 0).toFixed(2)} {payment.currency || 'INR'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {payment.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A'}
+                                </td>
+                                <td className="px-4 py-3 text-xs text-gray-600 break-all">
+                                  {payment.razorpayPaymentId || 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

@@ -11,6 +11,7 @@ const SurveyorBooking = require('./SurveyorBooking');
 const CargoManagerBooking = require('./CargoManagerBooking');
 const ServiceRequest = require('./ServiceRequest');
 const CustomReport = require('./CustomReport');
+const SurveyorPayment = require('./SurveyorPayment');
 
 module.exports = {
   User,
@@ -24,5 +25,6 @@ module.exports = {
   SurveyorBooking,
   CargoManagerBooking,
   ServiceRequest,
-  CustomReport
+  CustomReport,
+  SurveyorPayment
 };

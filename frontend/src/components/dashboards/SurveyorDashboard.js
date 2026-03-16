@@ -11,6 +11,7 @@ import HullInspectionReportModal from '../modals/HullInspectionReportModal';
 import PredictiveMaintenanceTab from './PredictiveMaintenanceTab';
 import HullInspection from '../HullInspection';
 import { downloadHullInspectionPdf, getHullConditionLabel } from '../../utils/hullInspectionPdf';
+import { jsPDF } from 'jspdf';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
@@ -172,6 +173,9 @@ export default function SurveyorDashboard() {
   // State for premium reports from localStorage
   const [premiumReports, setPremiumReports] = useState([]);
   const [hullInspectionReports, setHullInspectionReports] = useState([]);
+  const [paymentReceipts, setPaymentReceipts] = useState([]);
+  const [paymentReceiptsLoading, setPaymentReceiptsLoading] = useState(false);
+  const [paymentReceiptModal, setPaymentReceiptModal] = useState({ open: false, payment: null });
   // Add state for delete confirmation modal
   const [deleteConfirmModal, setDeleteConfirmModal] = useState({ open: false, reportId: null, reportName: '' });
   const [hullDeleteConfirmModal, setHullDeleteConfirmModal] = useState({ open: false, reportId: null, reportName: '' });
@@ -188,6 +192,8 @@ export default function SurveyorDashboard() {
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
   const [error, setError] = useState(null);
+  const [isRebuildingPremiumReports, setIsRebuildingPremiumReports] = useState(false);
+  const [premiumRebuildStatus, setPremiumRebuildStatus] = useState(null);
   const { counts } = useUnreadCounts();
   const [shipMgmtUserId, setShipMgmtUserId] = useState(null);
   const [detailsModal, setDetailsModal] = useState({ open: false, booking: null });
@@ -469,6 +475,7 @@ export default function SurveyorDashboard() {
     loadComplianceReports(); // Load compliance reports
     loadPremiumReports(); // Load premium reports from localStorage
     loadHullInspectionReports(); // Load hull inspection reports from localStorage
+    loadPaymentReceipts(); // Load received payment receipts
     loadCertificates(); // Load generated certificates
   }, []);
 
@@ -675,6 +682,78 @@ export default function SurveyorDashboard() {
     }
   };
 
+  const loadPaymentReceipts = async () => {
+    try {
+      setPaymentReceiptsLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+      const response = await axios.get('/api/payments/history/surveyor?limit=100', config);
+      setPaymentReceipts(response.data?.payments || []);
+    } catch (err) {
+      console.error('Error loading payment receipts:', err);
+      if (err.response?.data?.msg) {
+        setError(`Failed to load payment receipts: ${err.response.data.msg}`);
+      }
+      setPaymentReceipts([]);
+    } finally {
+      setPaymentReceiptsLoading(false);
+    }
+  };
+
+  const getPaymentReceiptDetails = (payment) => {
+    const receiptNumber = payment?.razorpayPaymentId || payment?.razorpayOrderId || payment?._id || 'N/A';
+
+    return {
+      receiptNumber,
+      paidAtText: payment?.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A',
+      amountText: `INR ${Number(payment?.amount || 0).toFixed(2)} ${payment?.currency || 'INR'}`,
+      payerName: payment?.payer?.name || 'Ship Company',
+      payerEmail: payment?.payer?.email || 'N/A',
+      vesselName: payment?.vessel?.name || 'Unknown Vessel',
+      vesselCode: payment?.vessel?.vesselId || payment?.vessel?.imo || 'N/A',
+      surveyorName: user?.name || 'Surveyor',
+      surveyorEmail: user?.email || 'N/A',
+      razorpayPaymentId: payment?.razorpayPaymentId || 'N/A',
+      razorpayOrderId: payment?.razorpayOrderId || 'N/A'
+    };
+  };
+
+  const handleViewPaymentReceipt = (payment) => {
+    setPaymentReceiptModal({ open: true, payment });
+  };
+
+  const handleDownloadPaymentReceipt = (payment) => {
+    const data = getPaymentReceiptDetails(payment);
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    doc.setFontSize(18);
+    doc.text('Payment Receipt', 15, 18);
+    doc.setFontSize(11);
+    doc.text(`Receipt No: ${data.receiptNumber}`, 15, 26);
+
+    const lines = [
+      `Paid At: ${data.paidAtText}`,
+      `Amount: ${data.amountText}`,
+      `Paid By (Ship Company): ${data.payerName} (${data.payerEmail})`,
+      `Received By (Surveyor): ${data.surveyorName} (${data.surveyorEmail})`,
+      `Vessel: ${data.vesselName}`,
+      `Vessel ID / IMO: ${data.vesselCode}`,
+      `Razorpay Payment ID: ${data.razorpayPaymentId}`,
+      `Razorpay Order ID: ${data.razorpayOrderId}`,
+      `Generated On: ${new Date().toLocaleString()}`
+    ];
+
+    let y = 38;
+    lines.forEach((line) => {
+      const wrapped = doc.splitTextToSize(line, 180);
+      doc.text(wrapped, 15, y);
+      y += wrapped.length * 7;
+    });
+
+    doc.save(`Payment_Receipt_${data.receiptNumber}.pdf`);
+  };
+
   const handleAcceptBooking = async (bookingId) => {
     try {
       const token = localStorage.getItem('token');
@@ -735,30 +814,229 @@ export default function SurveyorDashboard() {
   };
 
   // Load premium reports from localStorage
+  const buildPremiumReportsFromCompletedSurveys = (completedSurveys = []) => {
+    return completedSurveys
+      .filter((survey) => {
+        const surveyTypeText = String(survey?.surveyType || survey?.type || '').toLowerCase();
+        return surveyTypeText.includes('premium');
+      })
+      .map((survey, index) => ({
+        id: survey?._id || `premium-${Date.now()}-${index}`,
+        surveyId: survey?.surveyId || survey?._id,
+        surveyType: survey?.surveyType || survey?.type || 'Premium Quality',
+        timestamp: survey?.completedAt || survey?.updatedAt || survey?.createdAt || new Date().toISOString(),
+        shipName: survey?.vessel?.name || survey?.vesselName || survey?.shipName || 'VIP Ship',
+        shipId:
+          survey?.vessel?.vesselId ||
+          survey?.vesselId ||
+          survey?.vessel?.id ||
+          survey?.surveyId ||
+          survey?._id,
+        vessel: survey?.vessel || null,
+        derivedFromSurvey: true
+      }));
+  };
+
+  const buildPremiumReportsFromCompletedBookings = (bookingsList = []) => {
+    return bookingsList
+      .filter((booking) => {
+        const surveyTypeText = String(booking?.surveyType || '').toLowerCase();
+        const isPremiumType = surveyTypeText.includes('premium') || surveyTypeText.includes('vip');
+        const isCompleted = Boolean(booking?.completedAt) || String(booking?.status || '').toLowerCase() === 'completed';
+        return isPremiumType && isCompleted;
+      })
+      .map((booking, index) => ({
+        id: booking?._id || `premium-booking-${Date.now()}-${index}`,
+        surveyId: booking?.surveyId || booking?._id,
+        surveyType: booking?.surveyType || 'Premium Quality',
+        timestamp: booking?.completedAt || booking?.updatedAt || booking?.createdAt || new Date().toISOString(),
+        shipName: booking?.vessel?.name || booking?.vesselName || 'VIP Ship',
+        shipId: booking?.vessel?.vesselId || booking?.vesselId || booking?.vessel?._id || booking?._id,
+        vessel: booking?.vessel || null,
+        derivedFromBooking: true
+      }));
+  };
+
+  const readPremiumReportsFromStorage = () => {
+    const keys = ['premiumReports', 'premiumInspectionReports', 'premiumReportsBackup'];
+    const allReports = [];
+
+    keys.forEach((key) => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(parsed)) {
+          allReports.push(...parsed);
+        }
+      } catch (e) {
+        console.error(`Error reading ${key}:`, e);
+      }
+    });
+
+    return allReports.reduce((acc, report) => {
+      const reportKey = String(report?._id || report?.id || `${report?.surveyId || ''}-${report?.timestamp || ''}`);
+      if (!acc.some((item) => String(item?._id || item?.id || `${item?.surveyId || ''}-${item?.timestamp || ''}`) === reportKey)) {
+        acc.push(report);
+      }
+      return acc;
+    }, []);
+  };
+
   const loadPremiumReports = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/custom-reports/premium', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      let backendReports = [];
+      let derivedReports = [];
+      let bookingDerivedReports = [];
 
-      if (Array.isArray(response.data)) {
-        setPremiumReports(response.data);
-        localStorage.setItem('premiumReports', JSON.stringify(response.data));
-        return;
+      try {
+        const response = await axios.get('/api/custom-reports/premium', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        if (Array.isArray(response.data)) {
+          backendReports = response.data;
+        }
+      } catch (apiErr) {
+        console.error('Error loading premium reports from backend, using local fallback:', apiErr);
       }
 
-      const localReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
-      setPremiumReports(localReports);
+      const localReports = readPremiumReportsFromStorage();
+
+      const mergedReports = [...backendReports, ...localReports].reduce((acc, report) => {
+        const reportKey = String(report?._id || report?.id || `${report?.surveyId || ''}-${report?.timestamp || ''}`);
+
+        if (!acc.some((item) => String(item?._id || item?.id || `${item?.surveyId || ''}-${item?.timestamp || ''}`) === reportKey)) {
+          acc.push(report);
+        }
+
+        return acc;
+      }, []);
+
+      if (!mergedReports.length) {
+        try {
+          const completedResponse = await axios.get('/api/surveys/completed', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+
+          const completedSurveys = Array.isArray(completedResponse.data) ? completedResponse.data : [];
+
+          derivedReports = buildPremiumReportsFromCompletedSurveys(completedSurveys);
+        } catch (deriveErr) {
+          console.error('Error deriving premium reports from completed surveys:', deriveErr);
+        }
+
+        try {
+          const bookingsResponse = await axios.get('/api/surveyor-bookings', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+
+          const bookingItems = Array.isArray(bookingsResponse.data) ? bookingsResponse.data : [];
+          bookingDerivedReports = buildPremiumReportsFromCompletedBookings(bookingItems);
+        } catch (bookingErr) {
+          console.error('Error deriving premium reports from completed bookings:', bookingErr);
+        }
+      }
+
+      const reportsToUse = mergedReports.length
+        ? mergedReports
+        : (derivedReports.length ? derivedReports : (bookingDerivedReports.length ? bookingDerivedReports : localReports));
+
+      setPremiumReports(reportsToUse);
+      if (reportsToUse.length > 0) {
+        localStorage.setItem('premiumReports', JSON.stringify(reportsToUse));
+        localStorage.setItem('premiumReportsBackup', JSON.stringify(reportsToUse));
+      }
     } catch (err) {
-      console.error('Error loading premium reports from backend, using local fallback:', err);
+      console.error('Error loading premium reports:', err);
       try {
-        const localReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
+        const localReports = readPremiumReportsFromStorage();
         setPremiumReports(localReports);
       } catch (localErr) {
         console.error('Error loading local premium reports:', localErr);
         setPremiumReports([]);
       }
+    }
+  };
+
+  const handleRebuildPremiumReports = async () => {
+    try {
+      setIsRebuildingPremiumReports(true);
+      setPremiumRebuildStatus('Rebuilding premium reports...');
+
+      const token = localStorage.getItem('token');
+      const storageReports = readPremiumReportsFromStorage();
+      let backendReports = [];
+      let completedSurveys = Array.isArray(recentReports) && recentReports.length ? recentReports : [];
+      let bookingDerivedReports = [];
+
+      try {
+        const backendResponse = await axios.get('/api/custom-reports/premium', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        if (Array.isArray(backendResponse.data)) {
+          backendReports = backendResponse.data;
+        }
+      } catch (backendErr) {
+        console.error('Error fetching backend premium reports in rebuild:', backendErr);
+      }
+
+      if (!completedSurveys.length) {
+        const response = await axios.get('/api/surveys/completed', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        completedSurveys = Array.isArray(response.data) ? response.data : [];
+      }
+
+      const rebuiltReports = buildPremiumReportsFromCompletedSurveys(completedSurveys);
+      try {
+        const bookingsSource = Array.isArray(bookings) && bookings.length
+          ? bookings
+          : (Array.isArray(upcomingSurveys) ? upcomingSurveys : []);
+
+        if (bookingsSource.length) {
+          bookingDerivedReports = buildPremiumReportsFromCompletedBookings(bookingsSource);
+        } else {
+          const bookingsResponse = await axios.get('/api/surveyor-bookings', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+          const bookingItems = Array.isArray(bookingsResponse.data) ? bookingsResponse.data : [];
+          bookingDerivedReports = buildPremiumReportsFromCompletedBookings(bookingItems);
+        }
+      } catch (bookingErr) {
+        console.error('Error fetching bookings for premium rebuild:', bookingErr);
+      }
+
+      const mergedRecovered = [...backendReports, ...storageReports, ...rebuiltReports, ...bookingDerivedReports].reduce((acc, report) => {
+        const reportKey = String(report?._id || report?.id || `${report?.surveyId || ''}-${report?.timestamp || ''}`);
+        if (!acc.some((item) => String(item?._id || item?.id || `${item?.surveyId || ''}-${item?.timestamp || ''}`) === reportKey)) {
+          acc.push(report);
+        }
+        return acc;
+      }, []);
+
+      if (!mergedRecovered.length) {
+        setError('No premium survey data found to rebuild.');
+        setPremiumRebuildStatus(`No data found. Sources checked -> backend: ${backendReports.length}, local: ${storageReports.length}, completed premium surveys: ${rebuiltReports.length}, completed premium bookings: ${bookingDerivedReports.length}.`);
+        return;
+      }
+
+      setPremiumReports(mergedRecovered);
+      localStorage.setItem('premiumReports', JSON.stringify(mergedRecovered));
+      localStorage.setItem('premiumReportsBackup', JSON.stringify(mergedRecovered));
+      setError(null);
+      setSuccessMessage(`Recovered ${mergedRecovered.length} premium report${mergedRecovered.length > 1 ? 's' : ''} successfully.`);
+      setPremiumRebuildStatus(`Recovered ${mergedRecovered.length} report${mergedRecovered.length > 1 ? 's' : ''} (backend: ${backendReports.length}, local: ${storageReports.length}, surveys: ${rebuiltReports.length}, bookings: ${bookingDerivedReports.length}).`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setTimeout(() => setPremiumRebuildStatus(null), 3000);
+    } catch (err) {
+      console.error('Error rebuilding premium reports:', err);
+      setError('Failed to rebuild premium reports.');
+      setPremiumRebuildStatus('Rebuild failed. Please try again.');
+      setTimeout(() => setPremiumRebuildStatus(null), 3000);
+    } finally {
+      setIsRebuildingPremiumReports(false);
     }
   };
 
@@ -1482,7 +1760,7 @@ export default function SurveyorDashboard() {
   ];
 
   return (
-    <DashboardLayout title="Surveyor Dashboard" description="Inspection schedules and reports." onProfileClick={() => setShowProfile(s => !s)} fullWidth={true}>
+    <DashboardLayout title="Surveyor Dashboard" description="Inspection schedules and reports." onProfileClick={() => setShowProfile(s => !s)} fullWidth={true} showStatsCards={false}>
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         {/* Enhanced Sidebar - Fixed */}
         <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex-shrink-0`}>
@@ -1631,6 +1909,7 @@ export default function SurveyorDashboard() {
                 </Link>
               )}
             </div>
+
             <div className="mt-4 flex flex-wrap gap-2">
               {/* Search Input */}
               <div className="relative flex-1 min-w-[200px]">
@@ -1794,6 +2073,32 @@ export default function SurveyorDashboard() {
               </table>
             )}
           </div>
+
+          {paymentReceipts.length > 0 && (
+            <div className="m-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-emerald-800">Payment Notifications</p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    You have received {paymentReceipts.length} completed payment(s) from ship companies.
+                  </p>
+                </div>
+                <button
+                  onClick={loadPaymentReceipts}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+                >
+                  Refresh
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {paymentReceipts.slice(0, 3).map((payment) => (
+                  <div key={payment._id} className="text-xs text-emerald-900 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                    Payment of ₹{Number(payment.amount || 0).toFixed(2)} {payment.currency || 'INR'} received for {payment.vessel?.name || 'a vessel'} on {payment.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A'}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         )}
         
@@ -3026,7 +3331,7 @@ export default function SurveyorDashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {premiumReports.length === 0 ? (
+                {premiumReports.filter((report) => !report?.derivedFromSurvey && !report?.derivedFromBooking).length === 0 ? (
                   <tr>
                     <td colSpan="7" className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center">
@@ -3039,7 +3344,9 @@ export default function SurveyorDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  premiumReports.map((report) => (
+                  premiumReports
+                    .filter((report) => !report?.derivedFromSurvey && !report?.derivedFromBooking)
+                    .map((report) => (
                     <tr key={report.id} className="hover:bg-purple-50 transition-colors duration-200">
                       <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900">{report.shipId || report.surveyId}</td>
                       <td className="px-6 py-5 whitespace-nowrap">
@@ -3228,6 +3535,89 @@ export default function SurveyorDashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 mt-8 animate-fadeIn">
+          <div className="px-6 py-6 sm:px-8 bg-gradient-to-r from-emerald-50 to-green-50 border-b-2 border-emerald-200">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-1 flex items-center">
+                  <svg className="w-7 h-7 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2H4z" />
+                  </svg>
+                  Payment Receipts
+                </h3>
+                <p className="text-sm text-gray-600">Receipts for completed payments received from ship companies</p>
+              </div>
+              <button
+                onClick={loadPaymentReceipts}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+            {paymentReceiptsLoading ? (
+              <div className="p-6 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-500">Loading payment receipts...</p>
+              </div>
+            ) : paymentReceipts.length === 0 ? (
+              <div className="p-10 text-center text-gray-500">
+                <p className="font-medium">No payment receipts found</p>
+                <p className="text-sm text-gray-400 mt-1">Completed payments to you will appear here automatically.</p>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-emerald-50 to-green-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Ship Company</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Vessel</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Paid At</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Receipt</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paymentReceipts.map((payment) => (
+                    <tr key={payment._id} className="hover:bg-emerald-50 transition-colors duration-200">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-gray-900">{payment.payer?.name || 'Ship Company'}</div>
+                        <div className="text-xs text-gray-500">{payment.payer?.email || ''}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{payment.vessel?.name || 'Unknown Vessel'}</div>
+                        <div className="text-xs text-gray-500">{payment.vessel?.vesselId || payment.vessel?.imo || ''}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-700">
+                        ₹{Number(payment.amount || 0).toFixed(2)} {payment.currency || 'INR'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {payment.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewPaymentReceipt(payment)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => handleDownloadPaymentReceipt(payment)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          >
+                            Download
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
         </>
@@ -7130,6 +7520,87 @@ export default function SurveyorDashboard() {
             </div>
             <div className="px-6 py-4 border-t flex justify-end">
               <button onClick={() => setDetailsModal({ open: false, booking: null })} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Receipt Modal */}
+      {paymentReceiptModal.open && paymentReceiptModal.payment && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-2/3 lg:w-1/2 max-h-[85vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Payment Receipt</h3>
+              <button
+                onClick={() => setPaymentReceiptModal({ open: false, payment: null })}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {(() => {
+              const data = getPaymentReceiptDetails(paymentReceiptModal.payment);
+              return (
+                <div className="p-6 bg-gray-50">
+                  <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-5">
+                      <h4 className="text-2xl font-bold text-gray-900">Payment Receipt</h4>
+                      <p className="text-sm text-emerald-700 mt-1">Receipt No: {data.receiptNumber}</p>
+                    </div>
+
+                    <div className="px-6 py-4 text-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Paid At</div>
+                        <div className="flex-1 text-gray-900">{data.paidAtText}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Amount</div>
+                        <div className="flex-1 text-gray-900">{data.amountText}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Paid By (Ship Company)</div>
+                        <div className="flex-1 text-gray-900">{data.payerName} ({data.payerEmail})</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Received By (Surveyor)</div>
+                        <div className="flex-1 text-gray-900">{data.surveyorName} ({data.surveyorEmail})</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Vessel</div>
+                        <div className="flex-1 text-gray-900">{data.vesselName}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Vessel ID / IMO</div>
+                        <div className="flex-1 text-gray-900">{data.vesselCode}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start border-b border-gray-200 py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Razorpay Payment ID</div>
+                        <div className="flex-1 text-gray-900 break-all">{data.razorpayPaymentId}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-start py-3 gap-1 sm:gap-4">
+                        <div className="sm:w-56 font-semibold text-gray-700">Razorpay Order ID</div>
+                        <div className="flex-1 text-gray-900 break-all">{data.razorpayOrderId}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="px-6 py-4 border-t flex justify-end space-x-3">
+              <button
+                onClick={() => handleDownloadPaymentReceipt(paymentReceiptModal.payment)}
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Download PDF
+              </button>
+              <button
+                onClick={() => setPaymentReceiptModal({ open: false, payment: null })}
+                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Back
+              </button>
             </div>
           </div>
         </div>

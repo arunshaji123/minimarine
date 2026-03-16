@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const DashboardLayout = ({ children, title, description, onProfileClick = () => {}, fullWidth = false }) => {
+const DashboardLayout = ({ children, title, description, onProfileClick = () => {}, fullWidth = false, showStatsCards = true }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -157,6 +157,7 @@ const DashboardLayout = ({ children, title, description, onProfileClick = () => 
         </div>
 
         {/* Enhanced Stats Cards with Gradients */}
+        {showStatsCards && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Surveys Card */}
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 border border-blue-400 transform hover:scale-105 transition-all duration-300 animate-fadeIn">
@@ -260,6 +261,7 @@ const DashboardLayout = ({ children, title, description, onProfileClick = () => 
             </div>
           </div>
         </div>
+        )}
 
         {/* Main Content */}
         {fullWidth ? (

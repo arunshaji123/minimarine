@@ -191,11 +191,13 @@ const PremiumInspection = () => {
       const existingReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
       existingReports.unshift(persistedReport);
       localStorage.setItem('premiumReports', JSON.stringify(existingReports));
+      localStorage.setItem('premiumReportsBackup', JSON.stringify(existingReports));
     } catch (apiError) {
       console.error('Failed to save premium report to backend, using local fallback:', apiError);
       const existingReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
       existingReports.unshift(report);
       localStorage.setItem('premiumReports', JSON.stringify(existingReports));
+      localStorage.setItem('premiumReportsBackup', JSON.stringify(existingReports));
     }
     
     console.log('Premium Inspection Data:', formData);
