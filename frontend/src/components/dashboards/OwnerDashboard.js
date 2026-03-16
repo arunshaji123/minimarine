@@ -187,6 +187,14 @@ export default function OwnerDashboard() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
   const [bookingModalType, setBookingModalType] = useState('surveyor'); // 'surveyor' or 'cargo'
+  const [incomingInvoices, setIncomingInvoices] = useState([]);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceDetailModal, setInvoiceDetailModal] = useState({ open: false, invoice: null });
+  const [payingInvoiceId, setPayingInvoiceId] = useState(null);
+  const [invoicePaidIds, setInvoicePaidIds] = useState(new Set());
+  const [invoicePaySuccess, setInvoicePaySuccess] = useState(false);
+  const [paymentHistoryDateFilter, setPaymentHistoryDateFilter] = useState('all');
+  const [paymentHistoryCompanyFilter, setPaymentHistoryCompanyFilter] = useState('');
 
   // Ship Finder states
   const [selectedShipForDetails, setSelectedShipForDetails] = useState(null);
@@ -342,6 +350,19 @@ export default function OwnerDashboard() {
   useEffect(() => {
   }, [user]);
 
+  const loadIncomingInvoices = async () => {
+    try {
+      setInvoiceLoading(true);
+      const invoicesRes = await axios.get('/api/invoices');
+      setIncomingInvoices(Array.isArray(invoicesRes.data) ? invoicesRes.data : []);
+    } catch (invoiceErr) {
+      console.error('Error loading invoices:', invoiceErr);
+      setIncomingInvoices([]);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -385,6 +406,9 @@ export default function OwnerDashboard() {
         // Load surveyors for filtering
         const surveyorsRes = await axios.get('/api/users/surveyors');
         setSurveyors(surveyorsRes.data || []);
+
+        // Load incoming invoices for owner overview
+        await loadIncomingInvoices();
         
         setLoading(false);
       } catch (err) {
@@ -396,8 +420,235 @@ export default function OwnerDashboard() {
     
     fetchData();
   }, []);
-  
-  // Load compliance reports
+
+  // Load Razorpay checkout script once
+  useEffect(() => {
+    if (document.getElementById('razorpay-checkout-js')) return;
+    const script = document.createElement('script');
+    script.id = 'razorpay-checkout-js';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  // Download invoice as a print-friendly PDF via browser print dialog
+  const handleDownloadInvoice = (invoice) => {
+    const fmt = (n) => Number(n || 0).toLocaleString('en-IN');
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+    const rows = [];
+    let idx = 1;
+    if ((Number(invoice.completedShipSurveyCount) > 0) || (Number(invoice.completedShipSurveyRate) > 0)) {
+      rows.push(`<tr><td>${idx++}</td><td>Completed Ship Survey<br/><small>Rate: ₹${fmt(invoice.completedShipSurveyRate)} per survey</small></td><td style="text-align:center">${invoice.completedShipSurveyCount ?? 0}</td><td style="text-align:right">₹${fmt(invoice.completedShipSurveyAmount || (Number(invoice.completedShipSurveyCount) * Number(invoice.completedShipSurveyRate)))}</td></tr>`);
+    }
+    if ((Number(invoice.completedComplianceSurveyCount) > 0) || (Number(invoice.completedComplianceSurveyRate) > 0)) {
+      rows.push(`<tr><td>${idx++}</td><td>Completed Compliance Survey<br/><small>Rate: ₹${fmt(invoice.completedComplianceSurveyRate)} per survey</small></td><td style="text-align:center">${invoice.completedComplianceSurveyCount ?? 0}</td><td style="text-align:right">₹${fmt(invoice.completedComplianceSurveyAmount || (Number(invoice.completedComplianceSurveyCount) * Number(invoice.completedComplianceSurveyRate)))}</td></tr>`);
+    }
+    if (Number(invoice.managementAmount) > 0) {
+      rows.push(`<tr><td>${idx++}</td><td>Ship Management Charge<br/><small>Vessel: ${invoice.vessel?.name || '-'}</small></td><td style="text-align:center">1</td><td style="text-align:right">₹${fmt(invoice.managementAmount)}</td></tr>`);
+    }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice ${invoice.invoiceNumber || ''}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#111;}
+        .center{text-align:center;}
+        .badge{width:72px;height:72px;border-radius:50%;background:#10b981;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:2rem;font-weight:900;margin-bottom:8px;}
+        h1{font-size:3rem;font-weight:900;color:#10b981;letter-spacing:6px;margin:8px 0 0;}
+        .divider{height:3px;background:#10b981;margin:8px 0 16px;}
+        .bill-label{color:#10b981;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;}
+        .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:20px 0;}
+        .meta-cell{padding:12px 14px;background:#f9fafb;border-right:1px solid #e5e7eb;}
+        .meta-cell:last-child{border-right:none;}
+        .meta-label{font-size:0.7rem;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .meta-val{font-size:0.88rem;font-weight:700;color:#111;margin-top:3px;}
+        table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+        th{border-bottom:2px solid #e5e7eb;padding:8px 4px;font-size:0.75rem;color:#10b981;text-transform:uppercase;font-weight:700;}
+        td{padding:14px 4px;font-size:0.875rem;border-bottom:1px solid #f3f4f6;vertical-align:top;}
+        td small{color:#9ca3af;font-size:0.75rem;display:block;margin-top:2px;}
+        .totals{text-align:right;border-top:2px solid #e5e7eb;padding-top:12px;}
+        .total-row{display:flex;justify-content:flex-end;gap:0;}
+        .total-label{width:140px;font-size:0.875rem;color:#6b7280;}
+        .total-val{width:120px;text-align:right;font-size:0.875rem;font-weight:600;color:#111;}
+        .grand-label{font-size:1rem;font-weight:700;color:#111;}
+        .grand-val{font-size:1.2rem;font-weight:900;color:#10b981;}
+        .notes{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-top:16px;font-size:0.875rem;}
+        .notes-label{font-size:0.7rem;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:4px;}
+        .surveyor-line{font-size:0.75rem;color:#9ca3af;margin-top:14px;}
+        @media print{body{padding:16px;}}
+      </style></head><body>
+      <div class="center">
+        <div class="badge">${(invoice.shipCompany?.name || 'S').charAt(0).toUpperCase()}</div><br/>
+        <strong style="font-size:1.1rem">${invoice.shipCompany?.name || 'Ship Management Company'}</strong><br/>
+        <span style="font-size:0.9rem;color:#6b7280">${invoice.shipCompany?.email || ''}</span>
+        <h1>INVOICE</h1>
+        <div class="divider"></div>
+        <p class="bill-label">Bill To</p>
+        <strong>${invoice.owner?.name || 'Owner'}</strong><br/>
+        <span style="font-size:0.9rem;color:#6b7280">${invoice.owner?.email || ''}</span>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-cell"><div class="meta-label">Invoice #</div><div class="meta-val">${invoice.invoiceNumber || '-'}</div></div>
+        <div class="meta-cell"><div class="meta-label">Invoice Date</div><div class="meta-val">${fmtDate(invoice.issueDate)}</div></div>
+        <div class="meta-cell"><div class="meta-label">Vessel</div><div class="meta-val">${invoice.vessel?.name || '-'}</div></div>
+        <div class="meta-cell"><div class="meta-label">Due Date</div><div class="meta-val">${fmtDate(invoice.dueDate)}</div></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:28px">#</th><th style="text-align:left">Item &amp; Description</th><th style="text-align:center;width:60px">Qty</th><th style="text-align:right;width:120px">Amount</th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+      <div class="totals">
+        <div class="total-row"><span class="total-label">Subtotal</span><span class="total-val">₹${fmt(invoice.subtotalAmount || invoice.totalAmount)}</span></div>
+        ${Number(invoice.taxAmount) > 0 ? `<div class="total-row"><span class="total-label">Tax</span><span class="total-val">₹${fmt(invoice.taxAmount)}</span></div>` : ''}
+        <div class="total-row" style="border-top:1px solid #e5e7eb;margin-top:6px;padding-top:6px"><span class="total-label grand-label">Total</span><span class="total-val grand-val">₹${fmt(invoice.totalAmount)}</span></div>
+      </div>
+      ${invoice.notes ? `<div class="notes"><div class="notes-label">Notes</div>${invoice.notes}</div>` : ''}
+      <p class="surveyor-line">Surveyor: <strong>${invoice.surveyor?.name || '-'}</strong>${invoice.surveyor?.email ? ` · ${invoice.surveyor.email}` : ''}</p>
+    </body></html>`;
+    const win = window.open('', '_blank', 'width=800,height=900');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 600);
+    }
+  };
+
+  // Pay invoice via Razorpay test checkout
+  const handlePayInvoice = async (invoice) => {
+    if (payingInvoiceId) return;
+    setPayingInvoiceId(invoice._id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/invoices/${invoice._id}/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.msg || 'Failed to create order');
+      const { order, keyId } = data;
+
+      if (!window.Razorpay) {
+        alert('Razorpay checkout not loaded yet. Please try again.');
+        setPayingInvoiceId(null);
+        return;
+      }
+
+      const rzp = new window.Razorpay({
+        key: keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.id,
+        name: data.invoice?.shipCompanyName || 'Marine Survey',
+        description: `Invoice ${data.invoice?.invoiceNumber || ''} Payment`,
+        image: '',
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+          contact: ''
+        },
+        theme: { color: '#10b981' },
+        handler: async (response) => {
+          // Verify payment on backend
+          try {
+            const verifyRes = await fetch(`/api/invoices/${invoice._id}/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              setInvoicePaidIds((prev) => new Set(prev).add(String(invoice._id)));
+              setInvoicePaySuccess(true);
+              // Update local list status
+              setIncomingInvoices((prev) =>
+                prev.map((inv) => inv._id === invoice._id ? {
+                  ...inv,
+                  status: 'paid',
+                  paidAt: verifyData.paidAt || new Date().toISOString(),
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpayOrderId: response.razorpay_order_id
+                } : inv)
+              );
+              // Update modal invoice status
+              setInvoiceDetailModal((prev) =>
+                prev.invoice?._id === invoice._id
+                  ? {
+                    ...prev,
+                    invoice: {
+                      ...prev.invoice,
+                      status: 'paid',
+                      paidAt: verifyData.paidAt || new Date().toISOString(),
+                      razorpayPaymentId: response.razorpay_payment_id,
+                      razorpayOrderId: response.razorpay_order_id
+                    }
+                  }
+                  : prev
+              );
+              success('Invoice payment completed successfully');
+              setTimeout(() => setInvoicePaySuccess(false), 6000);
+            } else {
+              alert('Payment verification failed. Please contact support.');
+            }
+          } catch (verifyErr) {
+            console.error('Payment verification error:', verifyErr);
+            alert('Payment verified by Razorpay but backend verification failed. Please contact support.');
+          }
+          setPayingInvoiceId(null);
+        },
+        modal: {
+          ondismiss: () => { setPayingInvoiceId(null); }
+        }
+      });
+      rzp.open();
+    } catch (err) {
+      console.error('Invoice pay error:', err);
+      alert(err.message || 'Error initiating payment');
+      setPayingInvoiceId(null);
+    }
+  };
+
+  const isInvoiceMarkedPaid = (invoice) => {
+    if (!invoice) return false;
+    return invoice.status === 'paid' || invoicePaidIds.has(String(invoice._id));
+  };
+
+  const matchesPaymentRange = (invoice) => {
+    if (paymentHistoryDateFilter === 'all') return true;
+
+    const rawDate = invoice?.paidAt || invoice?.updatedAt || invoice?.issueDate;
+    if (!rawDate) return false;
+
+    const paymentDate = new Date(rawDate);
+    if (Number.isNaN(paymentDate.getTime())) return false;
+
+    const now = new Date();
+
+    if (paymentHistoryDateFilter === 'today') {
+      return paymentDate.toDateString() === now.toDateString();
+    }
+
+    const diffMs = now.getTime() - paymentDate.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    if (paymentHistoryDateFilter === '7') {
+      return diffDays <= 7;
+    }
+
+    if (paymentHistoryDateFilter === '30') {
+      return diffDays <= 30;
+    }
+
+    return true;
+  };
+
+  const filteredPaymentHistory = incomingInvoices
+    .filter((invoice) => isInvoiceMarkedPaid(invoice))
+    .filter((invoice) => matchesPaymentRange(invoice))
+    .filter((invoice) => !paymentHistoryCompanyFilter || invoice?.shipCompany?._id === paymentHistoryCompanyFilter)
+    .sort((a, b) => new Date(b.paidAt || b.updatedAt || b.issueDate) - new Date(a.paidAt || a.updatedAt || a.issueDate));
+
   const loadComplianceReports = async () => {
     try {
       setComplianceLoading(true);
@@ -1422,6 +1673,435 @@ export default function OwnerDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Incoming Invoices Section */}
+            <div className="mb-6">
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b-2 border-emerald-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <svg className="w-6 h-6 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H4zm2 6a1 1 0 100 2h8a1 1 0 100-2H6zm0 4a1 1 0 100 2h8a1 1 0 100-2H6z" />
+                      </svg>
+                      <h3 className="text-xl font-bold text-gray-900">Incoming Invoices</h3>
+                    </div>
+                    <span className="text-sm text-gray-600">{incomingInvoices.length} invoice(s)</span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Invoice #</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Ship</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Surveyor</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Issue Date</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Total</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {invoiceLoading ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">Loading invoices...</td>
+                        </tr>
+                      ) : incomingInvoices.length > 0 ? (
+                        incomingInvoices.map((invoice) => (
+                          <tr key={invoice._id} className="hover:bg-emerald-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{invoice.invoiceNumber || '-'}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              <div className="font-medium">{invoice.vessel?.name || '-'}</div>
+                              <div className="text-xs text-gray-400">{invoice.vessel?.vesselId || invoice.vessel?.imo || '-'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{invoice.surveyor?.name || '-'}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {invoice.issueDate ? new Date(invoice.issueDate).toLocaleString() : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-700">
+                              ₹{(Number(invoice.totalAmount) || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <button
+                                onClick={() => setInvoiceDetailModal({ open: true, invoice })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                </svg>
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-12 text-center">
+                            <div className="flex flex-col items-center">
+                              <svg className="w-14 h-14 text-gray-300 mb-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H4zm2 6a1 1 0 100 2h8a1 1 0 100-2H6zm0 4a1 1 0 100 2h8a1 1 0 100-2H6z" />
+                              </svg>
+                              <p className="text-gray-500 text-sm font-medium">No incoming invoices yet</p>
+                              <p className="text-gray-400 text-xs mt-1">Invoices sent by ship management will appear here</p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment History Section */}
+            <div className="mb-6">
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-green-50 border-b-2 border-emerald-200">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center">
+                      <svg className="w-6 h-6 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1V4a1 1 0 10-2 0v1H7V4a1 1 0 10-2 0v1H4z" />
+                      </svg>
+                      <h3 className="text-xl font-bold text-gray-900">Payment History</h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex rounded-lg overflow-hidden border border-emerald-300 text-xs font-semibold">
+                        {[['all', 'All Time'], ['today', 'Today'], ['7', 'Last 7 Days'], ['30', 'Last 30 Days']].map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setPaymentHistoryDateFilter(val)}
+                            className={`px-3 py-1.5 transition-colors ${
+                              paymentHistoryDateFilter === val
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-white text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <select
+                        value={paymentHistoryCompanyFilter}
+                        onChange={(e) => setPaymentHistoryCompanyFilter(e.target.value)}
+                        className="text-xs border border-emerald-300 rounded-lg px-3 py-1.5 bg-white text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      >
+                        <option value="">All Companies</option>
+                        {Array.from(
+                          new Map(
+                            incomingInvoices
+                              .filter((invoice) => isInvoiceMarkedPaid(invoice) && invoice.shipCompany?._id)
+                              .map((invoice) => [invoice.shipCompany._id, invoice.shipCompany.name])
+                          ).entries()
+                        ).map(([id, name]) => (
+                          <option key={id} value={id}>{name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={loadIncomingInvoices}
+                        title="Refresh"
+                        className="p-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </div>
+                    <span className="text-sm text-gray-500 ml-auto">{filteredPaymentHistory.length} result(s)</span>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  {invoiceLoading ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+                      <p className="mt-2 text-sm text-gray-500">Loading payment history...</p>
+                    </div>
+                  ) : filteredPaymentHistory.length === 0 ? (
+                    <div className="text-center py-8">
+                      <svg className="w-14 h-14 text-gray-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1H8a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-gray-600 font-medium">
+                        {incomingInvoices.filter((invoice) => isInvoiceMarkedPaid(invoice)).length === 0 ? 'No completed payments yet' : 'No payments match the selected filters'}
+                      </p>
+                      <p className="text-gray-400 text-sm mt-1">
+                        {incomingInvoices.filter((invoice) => isInvoiceMarkedPaid(invoice)).length === 0
+                          ? 'Completed invoice payments will appear here'
+                          : 'Try adjusting the date or company filter'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ship Company</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Vessel</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid At</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Surveyor</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredPaymentHistory.map((invoice) => (
+                            <tr key={`payment-${invoice._id}`} className="hover:bg-emerald-50 transition-colors">
+                              <td className="px-4 py-3">
+                                <p className="text-sm font-semibold text-gray-900">{invoice.shipCompany?.name || 'Unknown Company'}</p>
+                                <p className="text-xs text-gray-500">{invoice.shipCompany?.email || ''}</p>
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="text-sm font-medium text-gray-900">{invoice.vessel?.name || 'Unknown Vessel'}</p>
+                                <p className="text-xs text-gray-500">{invoice.vessel?.vesselId || invoice.vessel?.imo || ''}</p>
+                              </td>
+                              <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+                                ₹{Number(invoice.totalAmount || 0).toFixed(2)} {invoice.currency || 'INR'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700">
+                                {invoice.paidAt ? new Date(invoice.paidAt).toLocaleString() : 'N/A'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="text-sm font-semibold text-gray-900">{invoice.surveyor?.name || 'Unknown Surveyor'}</p>
+                                <p className="text-xs text-gray-500">{invoice.surveyor?.email || ''}</p>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Detail View Modal — Professional Invoice Layout */}
+            {invoiceDetailModal.open && invoiceDetailModal.invoice && (
+              <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setInvoiceDetailModal({ open: false, invoice: null })}>
+                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
+
+                  {/* Close button */}
+                  <button
+                    onClick={() => setInvoiceDetailModal({ open: false, invoice: null })}
+                    className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+
+                  <div className="px-10 pt-10 pb-8">
+
+                    {/* Company header */}
+                    <div className="flex flex-col items-center mb-6">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center mb-3 shadow-md">
+                        <span className="text-white text-2xl font-extrabold select-none">
+                          {(invoiceDetailModal.invoice.shipCompany?.name || 'S').charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-lg font-extrabold text-gray-900 text-center">{invoiceDetailModal.invoice.shipCompany?.name || 'Ship Management Company'}</p>
+                      <p className="text-sm text-gray-500 text-center mt-0.5">{invoiceDetailModal.invoice.shipCompany?.email || ''}</p>
+                    </div>
+
+                    {/* INVOICE title */}
+                    <div className="text-center mb-4">
+                      <h2 className="text-5xl font-black tracking-widest text-emerald-500 uppercase">INVOICE</h2>
+                      <div className="mt-3 h-0.5 bg-emerald-500 rounded-full" />
+                    </div>
+
+                    {/* Bill To */}
+                    <div className="text-center mb-6">
+                      <p className="text-emerald-600 font-semibold text-sm mb-1">Bill To</p>
+                      <p className="text-base font-extrabold text-gray-900">{invoiceDetailModal.invoice.owner?.name || user?.name || 'Owner'}</p>
+                      <p className="text-sm text-gray-500">{invoiceDetailModal.invoice.owner?.email || user?.email || ''}</p>
+                    </div>
+
+                    {/* Metadata row */}
+                    <div className="grid grid-cols-4 gap-2 border border-gray-200 rounded-lg overflow-hidden mb-8">
+                      <div className="px-3 py-3 bg-gray-50 border-r border-gray-200">
+                        <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Invoice #</p>
+                        <p className="text-sm font-bold text-gray-900">{invoiceDetailModal.invoice.invoiceNumber || '-'}</p>
+                      </div>
+                      <div className="px-3 py-3 bg-gray-50 border-r border-gray-200">
+                        <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Invoice Date</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {invoiceDetailModal.invoice.issueDate
+                            ? new Date(invoiceDetailModal.invoice.issueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '-'}
+                        </p>
+                      </div>
+                      <div className="px-3 py-3 bg-gray-50 border-r border-gray-200">
+                        <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Vessel</p>
+                        <p className="text-sm font-bold text-gray-900">{invoiceDetailModal.invoice.vessel?.name || '-'}</p>
+                      </div>
+                      <div className="px-3 py-3 bg-gray-50">
+                        <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Due Date</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {invoiceDetailModal.invoice.dueDate
+                            ? new Date(invoiceDetailModal.invoice.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : 'On Receipt'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Line items table */}
+                    <table className="w-full mb-6">
+                      <thead>
+                        <tr className="border-b-2 border-gray-200">
+                          <th className="text-left py-2 text-xs font-bold text-emerald-600 uppercase w-8">#</th>
+                          <th className="text-left py-2 text-xs font-bold text-emerald-600 uppercase">Item &amp; Description</th>
+                          <th className="text-center py-2 text-xs font-bold text-emerald-600 uppercase w-20">Qty</th>
+                          <th className="text-right py-2 text-xs font-bold text-emerald-600 uppercase w-32">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {(Number(invoiceDetailModal.invoice.completedShipSurveyCount) > 0 || Number(invoiceDetailModal.invoice.completedShipSurveyRate) > 0) && (
+                          <tr>
+                            <td className="py-3.5 text-sm text-gray-500 align-top">1</td>
+                            <td className="py-3.5 align-top">
+                              <p className="text-sm font-semibold text-gray-900">Completed Ship Survey</p>
+                              <p className="text-xs text-gray-400 mt-0.5">Rate: ₹{(Number(invoiceDetailModal.invoice.completedShipSurveyRate) || 0).toLocaleString('en-IN')} per survey</p>
+                            </td>
+                            <td className="py-3.5 text-sm text-center text-gray-700 align-top">{invoiceDetailModal.invoice.completedShipSurveyCount ?? 0}</td>
+                            <td className="py-3.5 text-sm text-right font-semibold text-gray-900 align-top">
+                              ₹{(Number(invoiceDetailModal.invoice.completedShipSurveyAmount) || (Number(invoiceDetailModal.invoice.completedShipSurveyCount) || 0) * (Number(invoiceDetailModal.invoice.completedShipSurveyRate) || 0)).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        )}
+                        {(Number(invoiceDetailModal.invoice.completedComplianceSurveyCount) > 0 || Number(invoiceDetailModal.invoice.completedComplianceSurveyRate) > 0) && (
+                          <tr>
+                            <td className="py-3.5 text-sm text-gray-500 align-top">2</td>
+                            <td className="py-3.5 align-top">
+                              <p className="text-sm font-semibold text-gray-900">Completed Compliance Survey</p>
+                              <p className="text-xs text-gray-400 mt-0.5">Rate: ₹{(Number(invoiceDetailModal.invoice.completedComplianceSurveyRate) || 0).toLocaleString('en-IN')} per survey</p>
+                            </td>
+                            <td className="py-3.5 text-sm text-center text-gray-700 align-top">{invoiceDetailModal.invoice.completedComplianceSurveyCount ?? 0}</td>
+                            <td className="py-3.5 text-sm text-right font-semibold text-gray-900 align-top">
+                              ₹{(Number(invoiceDetailModal.invoice.completedComplianceSurveyAmount) || (Number(invoiceDetailModal.invoice.completedComplianceSurveyCount) || 0) * (Number(invoiceDetailModal.invoice.completedComplianceSurveyRate) || 0)).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        )}
+                        {Number(invoiceDetailModal.invoice.managementAmount) > 0 && (
+                          <tr>
+                            <td className="py-3.5 text-sm text-gray-500 align-top">3</td>
+                            <td className="py-3.5 align-top">
+                              <p className="text-sm font-semibold text-gray-900">Ship Management Charge</p>
+                              <p className="text-xs text-gray-400 mt-0.5">Vessel: {invoiceDetailModal.invoice.vessel?.name || '-'}</p>
+                            </td>
+                            <td className="py-3.5 text-sm text-center text-gray-700 align-top">1</td>
+                            <td className="py-3.5 text-sm text-right font-semibold text-gray-900 align-top">
+                              ₹{(Number(invoiceDetailModal.invoice.managementAmount) || 0).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+
+                    {/* Totals */}
+                    <div className="border-t-2 border-gray-200 pt-4 flex flex-col items-end gap-1.5 mb-6">
+                      <div className="flex justify-between w-56">
+                        <span className="text-sm text-gray-500">Subtotal</span>
+                        <span className="text-sm font-semibold text-gray-800">₹{(Number(invoiceDetailModal.invoice.subtotalAmount) || Number(invoiceDetailModal.invoice.totalAmount) || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                      {Number(invoiceDetailModal.invoice.taxAmount) > 0 && (
+                        <div className="flex justify-between w-56">
+                          <span className="text-sm text-gray-500">Tax</span>
+                          <span className="text-sm font-semibold text-gray-800">₹{Number(invoiceDetailModal.invoice.taxAmount).toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between w-56 border-t border-gray-200 pt-2 mt-1">
+                        <span className="text-base font-bold text-gray-900">Total</span>
+                        <span className="text-xl font-extrabold text-emerald-600">₹{(Number(invoiceDetailModal.invoice.totalAmount) || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* Surveyor info */}
+                    <div className="text-xs text-gray-400 mb-4">
+                      Surveyor: <span className="font-semibold text-gray-600">{invoiceDetailModal.invoice.surveyor?.name || '-'}</span>
+                      {invoiceDetailModal.invoice.surveyor?.email && <span> · {invoiceDetailModal.invoice.surveyor.email}</span>}
+                    </div>
+
+                    {/* Notes */}
+                    {invoiceDetailModal.invoice.notes && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-6">
+                        <p className="text-xs text-gray-400 font-semibold uppercase mb-1">Notes</p>
+                        <p className="text-sm text-gray-700">{invoiceDetailModal.invoice.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Payment success banner inside modal */}
+                    {invoicePaySuccess && (
+                      <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 mb-5">
+                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                        </svg>
+                        <div>
+                          <p className="text-emerald-800 font-bold text-sm">Payment Successful!</p>
+                          <p className="text-emerald-700 text-xs">Invoice has been marked as paid.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Already paid badge */}
+                    {(invoiceDetailModal.invoice.status === 'paid' || invoicePaidIds.has(String(invoiceDetailModal.invoice._id))) && !invoicePaySuccess && (
+                      <div className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 mb-5">
+                        <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                        </svg>
+                        <span className="text-emerald-700 font-semibold text-sm">This invoice has been paid</span>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                      {/* Download */}
+                      <button
+                        onClick={() => handleDownloadInvoice(invoiceDetailModal.invoice)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download Invoice
+                      </button>
+
+                      {/* Pay — only if not already paid */}
+                      {invoiceDetailModal.invoice.status !== 'paid' && !invoicePaidIds.has(String(invoiceDetailModal.invoice._id)) && (
+                        <button
+                          onClick={() => handlePayInvoice(invoiceDetailModal.invoice)}
+                          disabled={payingInvoiceId === invoiceDetailModal.invoice._id}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm transition-colors shadow"
+                        >
+                          {payingInvoiceId === invoiceDetailModal.invoice._id ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                              </svg>
+                              Processing…
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                              </svg>
+                              Pay ₹{(Number(invoiceDetailModal.invoice.totalAmount) || 0).toLocaleString('en-IN')}
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {/* Close */}
+                      <button
+                        onClick={() => setInvoiceDetailModal({ open: false, invoice: null })}
+                        className="px-5 py-2.5 border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg font-semibold text-sm transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Ship Finder & Details Section */}
             <div className="mb-6">

@@ -84,6 +84,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/hull-inspection', require('./routes/hullInspection'));
 app.use('/api/custom-reports', require('./routes/customReports'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/invoices', require('./routes/invoices'));
 
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {

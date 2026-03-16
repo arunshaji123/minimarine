@@ -311,9 +311,24 @@ export default function ShipManagementDashboard() {
   const [payingSurveyorId, setPayingSurveyorId] = useState(null);
   const [paidSurveyorStatuses, setPaidSurveyorStatuses] = useState({});
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [receivedPaymentHistory, setReceivedPaymentHistory] = useState([]);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
+  const [paymentHistoryMode, setPaymentHistoryMode] = useState('paid');
   const [paymentHistoryDateFilter, setPaymentHistoryDateFilter] = useState('all');
   const [paymentHistorySurveyorFilter, setPaymentHistorySurveyorFilter] = useState('');
+  const [invoiceModal, setInvoiceModal] = useState({ open: false, owner: null });
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [invoiceSentForOwner, setInvoiceSentForOwner] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState({
+    surveyorId: '',
+    completedShipSurveyCount: 0,
+    completedShipSurveyRate: 0,
+    completedComplianceSurveyCount: 0,
+    completedComplianceSurveyRate: 0,
+    managementAmount: 0,
+    dueDate: '',
+    notes: ''
+  });
 
   const loadRazorpayScript = () => {
     if (window.Razorpay) return Promise.resolve(true);
@@ -381,6 +396,53 @@ export default function ShipManagementDashboard() {
     } finally {
       setPaymentHistoryLoading(false);
     }
+  };
+
+  const loadReceivedPaymentHistory = async () => {
+    try {
+      setPaymentHistoryLoading(true);
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      const response = await axios.get('/api/invoices', config);
+      const paidInvoices = (Array.isArray(response.data) ? response.data : []).filter((invoice) => invoice?.status === 'paid');
+      setReceivedPaymentHistory(paidInvoices);
+    } catch (err) {
+      console.error('Error loading received payment history:', err.message);
+      setReceivedPaymentHistory([]);
+    } finally {
+      setPaymentHistoryLoading(false);
+    }
+  };
+
+  const matchesPaymentHistoryDateFilter = (paidAt) => {
+    const now = new Date();
+    const paid = paidAt ? new Date(paidAt) : null;
+    if (!paid) return false;
+
+    if (paymentHistoryDateFilter === 'today') return paid.toDateString() === now.toDateString();
+    if (paymentHistoryDateFilter === '7') return (now - paid) <= 7 * 86400000;
+    if (paymentHistoryDateFilter === '30') return (now - paid) <= 30 * 86400000;
+    return true;
+  };
+
+  const getActivePaymentSource = () => (
+    paymentHistoryMode === 'paid' ? paymentHistory : receivedPaymentHistory
+  );
+
+  const getFilteredActivePayments = () => {
+    const source = getActivePaymentSource();
+    return source.filter((entry) => {
+      const paidAt = entry?.paidAt;
+      const dateOk = matchesPaymentHistoryDateFilter(paidAt);
+
+      if (paymentHistoryMode === 'paid') {
+        const surveyorOk = !paymentHistorySurveyorFilter || entry?.surveyor?._id === paymentHistorySurveyorFilter;
+        return dateOk && surveyorOk;
+      }
+
+      const ownerOk = !paymentHistorySurveyorFilter || entry?.owner?._id === paymentHistorySurveyorFilter;
+      return dateOk && ownerOk;
+    });
   };
 
   // Helper function to get overall compliance status
@@ -650,6 +712,85 @@ export default function ShipManagementDashboard() {
     }
   };
 
+  const openInvoiceModal = () => {
+    const owner = selectedShipForDetails?.owner;
+    if (!owner || !selectedShipForDetails || !shipDetailsData) {
+      setError('Owner and ship details are required to send an invoice.');
+      return;
+    }
+
+    const completedShipSurveyCount = shipDetailsData.surveys.filter((survey) => survey.status === 'Completed').length;
+    const completedComplianceSurveyCount = shipDetailsData.complianceReports.length;
+    const defaultSurveyorId = shipDetailsData.surveyors?.[0]?.id || '';
+
+    setInvoiceForm({
+      surveyorId: defaultSurveyorId,
+      completedShipSurveyCount,
+      completedShipSurveyRate: 0,
+      completedComplianceSurveyCount,
+      completedComplianceSurveyRate: 0,
+      managementAmount: 0,
+      dueDate: '',
+      notes: `Invoice for vessel ${selectedShipForDetails.name}`
+    });
+    setInvoiceModal({ open: true, owner });
+  };
+
+  const closeInvoiceModal = () => {
+    setInvoiceModal({ open: false, owner: null });
+    setSendingInvoice(false);
+  };
+
+  const handleInvoiceFieldChange = (field, value) => {
+    setInvoiceForm((prev) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSendInvoice = async (e) => {
+    e.preventDefault();
+
+    if (!invoiceModal.owner?._id || !selectedShipForDetails?._id) {
+      setError('Missing owner or vessel details for invoice.');
+      return;
+    }
+
+    if (!invoiceForm.surveyorId) {
+      setError('Please select a surveyor for this invoice.');
+      return;
+    }
+
+    try {
+      setSendingInvoice(true);
+
+      await axios.post('/api/invoices', {
+        ownerId: invoiceModal.owner._id,
+        surveyorId: invoiceForm.surveyorId,
+        vesselId: selectedShipForDetails._id,
+        completedShipSurveyCount: Number(invoiceForm.completedShipSurveyCount) || 0,
+        completedShipSurveyRate: Number(invoiceForm.completedShipSurveyRate) || 0,
+        completedComplianceSurveyCount: Number(invoiceForm.completedComplianceSurveyCount) || 0,
+        completedComplianceSurveyRate: Number(invoiceForm.completedComplianceSurveyRate) || 0,
+        managementAmount: Number(invoiceForm.managementAmount) || 0,
+        dueDate: invoiceForm.dueDate || null,
+        notes: invoiceForm.notes || ''
+      });
+
+      setSuccessMessage('Invoice sent successfully to owner dashboard.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setInvoiceSentForOwner(true);
+      setTimeout(() => setInvoiceSentForOwner(false), 6000);
+      await loadReceivedPaymentHistory();
+      closeInvoiceModal();
+    } catch (err) {
+      console.error('Error sending invoice:', err);
+      setError(err.response?.data?.msg || 'Failed to send invoice.');
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
+
   // Function to fetch KNN predictions for a vessel
   const fetchKNNPredictions = async (vesselId) => {
     if (!vesselId || knnLoading) return;
@@ -805,9 +946,14 @@ export default function ShipManagementDashboard() {
       loadComplianceReports();
       loadCertificates();
       loadPaymentHistory();
+      loadReceivedPaymentHistory();
     };
     loadData();
   }, []);
+
+  useEffect(() => {
+    setPaymentHistorySurveyorFilter('');
+  }, [paymentHistoryMode]);
   // Unread counts for messaging
   const { counts } = useUnreadCounts();
 
@@ -1561,13 +1707,38 @@ export default function ShipManagementDashboard() {
 
                       {/* Owner Information */}
                       {selectedShipForDetails.owner && (
+                        <>
+                        {invoiceSentForOwner && (
+                          <div className="flex items-center gap-3 px-5 py-3.5 bg-emerald-50 border-2 border-emerald-400 rounded-xl shadow-sm">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-emerald-800 font-bold text-sm">Invoice Sent Successfully!</p>
+                              <p className="text-emerald-600 text-xs mt-0.5">The invoice has been delivered to the owner&apos;s dashboard.</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
-                          <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                            <svg className="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                            </svg>
-                            Owner Information
-                          </h4>
+                          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <h4 className="text-lg font-bold text-gray-900 flex items-center">
+                              <svg className="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                              </svg>
+                              Owner Information
+                            </h4>
+                            <button
+                              onClick={openInvoiceModal}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-bold rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                            >
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H4zm1 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h8a1 1 0 100-2H6z" />
+                              </svg>
+                              Send Invoice
+                            </button>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                               <p className="text-xs text-gray-600 font-semibold uppercase">Owner Name</p>
@@ -1585,6 +1756,7 @@ export default function ShipManagementDashboard() {
                             </div>
                           </div>
                         </div>
+                        </>
                       )}
 
                       {/* Surveys Summary */}
@@ -2078,6 +2250,27 @@ export default function ShipManagementDashboard() {
                     </div>
                     {/* Filters row */}
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* Paid / Received toggle */}
+                      <div className="flex rounded-lg overflow-hidden border border-emerald-300 text-xs font-semibold">
+                        {[['paid', 'Paid'], ['received', 'Received']].map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => {
+                              setPaymentHistoryMode(val);
+                              if (val === 'paid' && paymentHistory.length === 0) loadPaymentHistory();
+                              if (val === 'received' && receivedPaymentHistory.length === 0) loadReceivedPaymentHistory();
+                            }}
+                            className={`px-3 py-1.5 transition-colors ${
+                              paymentHistoryMode === val
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-white text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
                       {/* Date filter */}
                       <div className="flex rounded-lg overflow-hidden border border-emerald-300 text-xs font-semibold">
                         {[['all','All Time'],['today','Today'],['7','Last 7 Days'],['30','Last 30 Days']].map(([val, label]) => (
@@ -2100,20 +2293,37 @@ export default function ShipManagementDashboard() {
                         onChange={(e) => setPaymentHistorySurveyorFilter(e.target.value)}
                         className="text-xs border border-emerald-300 rounded-lg px-3 py-1.5 bg-white text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                       >
-                        <option value="">All Surveyors</option>
-                        {Array.from(
-                          new Map(
-                            paymentHistory
-                              .filter(p => p.surveyor?._id)
-                              .map(p => [p.surveyor._id, p.surveyor.name])
-                          ).entries()
-                        ).map(([id, name]) => (
-                          <option key={id} value={id}>{name}</option>
-                        ))}
+                        {paymentHistoryMode === 'paid' ? (
+                          <>
+                            <option value="">All Surveyors</option>
+                            {Array.from(
+                              new Map(
+                                paymentHistory
+                                  .filter(p => p.surveyor?._id)
+                                  .map(p => [p.surveyor._id, p.surveyor.name])
+                              ).entries()
+                            ).map(([id, name]) => (
+                              <option key={id} value={id}>{name}</option>
+                            ))}
+                          </>
+                        ) : (
+                          <>
+                            <option value="">All Owners</option>
+                            {Array.from(
+                              new Map(
+                                receivedPaymentHistory
+                                  .filter(p => p.owner?._id)
+                                  .map(p => [p.owner._id, p.owner.name])
+                              ).entries()
+                            ).map(([id, name]) => (
+                              <option key={id} value={id}>{name}</option>
+                            ))}
+                          </>
+                        )}
                       </select>
                       {/* Refresh */}
                       <button
-                        onClick={loadPaymentHistory}
+                        onClick={() => (paymentHistoryMode === 'paid' ? loadPaymentHistory() : loadReceivedPaymentHistory())}
                         title="Refresh"
                         className="p-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-600 hover:bg-emerald-50 transition-colors"
                       >
@@ -2122,21 +2332,7 @@ export default function ShipManagementDashboard() {
                         </svg>
                       </button>
                     </div>
-                    <span className="text-sm text-gray-500 ml-auto">
-                      {(() => {
-                        const now = new Date();
-                        return paymentHistory.filter(p => {
-                          const paid = p.paidAt ? new Date(p.paidAt) : null;
-                          const dateOk = !paid ? false
-                            : paymentHistoryDateFilter === 'today' ? paid.toDateString() === now.toDateString()
-                            : paymentHistoryDateFilter === '7' ? (now - paid) <= 7 * 86400000
-                            : paymentHistoryDateFilter === '30' ? (now - paid) <= 30 * 86400000
-                            : true;
-                          const surveyorOk = !paymentHistorySurveyorFilter || p.surveyor?._id === paymentHistorySurveyorFilter;
-                          return dateOk && surveyorOk;
-                        }).length;
-                      })()} result(s)
-                    </span>
+                    <span className="text-sm text-gray-500 ml-auto">{getFilteredActivePayments().length} result(s)</span>
                   </div>
                 </div>
 
@@ -2147,17 +2343,8 @@ export default function ShipManagementDashboard() {
                       <p className="mt-2 text-sm text-gray-500">Loading payment history...</p>
                     </div>
                   ) : (() => {
-                    const now = new Date();
-                    const filtered = paymentHistory.filter(p => {
-                      const paid = p.paidAt ? new Date(p.paidAt) : null;
-                      const dateOk = !paid ? false
-                        : paymentHistoryDateFilter === 'today' ? paid.toDateString() === now.toDateString()
-                        : paymentHistoryDateFilter === '7' ? (now - paid) <= 7 * 86400000
-                        : paymentHistoryDateFilter === '30' ? (now - paid) <= 30 * 86400000
-                        : true;
-                      const surveyorOk = !paymentHistorySurveyorFilter || p.surveyor?._id === paymentHistorySurveyorFilter;
-                      return dateOk && surveyorOk;
-                    });
+                    const filtered = getFilteredActivePayments();
+                    const sourceLength = getActivePaymentSource().length;
 
                     return filtered.length === 0 ? (
                       <div className="text-center py-8">
@@ -2165,12 +2352,14 @@ export default function ShipManagementDashboard() {
                           <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1H8a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
                         </svg>
                         <p className="text-gray-600 font-medium">
-                          {paymentHistory.length === 0 ? 'No completed payments yet' : 'No payments match the selected filters'}
+                          {sourceLength === 0 ? `No completed ${paymentHistoryMode} payments yet` : 'No payments match the selected filters'}
                         </p>
                         <p className="text-gray-400 text-sm mt-1">
-                          {paymentHistory.length === 0
-                            ? 'Completed surveyor payments will appear here'
-                            : 'Try adjusting the date or surveyor filter'}
+                          {sourceLength === 0
+                            ? paymentHistoryMode === 'paid'
+                              ? 'Completed surveyor payments will appear here'
+                              : 'Owner invoice payments received will appear here'
+                            : `Try adjusting the date or ${paymentHistoryMode === 'paid' ? 'surveyor' : 'owner'} filter`}
                         </p>
                       </div>
                     ) : (
@@ -2178,32 +2367,40 @@ export default function ShipManagementDashboard() {
                         <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gray-50">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Surveyor</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                {paymentHistoryMode === 'paid' ? 'Surveyor' : 'Owner'}
+                              </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Vessel</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid At</th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment ID</th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                {paymentHistoryMode === 'paid' ? 'Payment ID' : 'Invoice #'}
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {filtered.map((payment) => (
                               <tr key={payment._id} className="hover:bg-emerald-50 transition-colors">
                                 <td className="px-4 py-3">
-                                  <p className="text-sm font-semibold text-gray-900">{payment.surveyor?.name || 'Unknown Surveyor'}</p>
-                                  <p className="text-xs text-gray-500">{payment.surveyor?.email || ''}</p>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {paymentHistoryMode === 'paid' ? (payment.surveyor?.name || 'Unknown Surveyor') : (payment.owner?.name || 'Unknown Owner')}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {paymentHistoryMode === 'paid' ? (payment.surveyor?.email || '') : (payment.owner?.email || '')}
+                                  </p>
                                 </td>
                                 <td className="px-4 py-3">
                                   <p className="text-sm font-medium text-gray-900">{payment.vessel?.name || 'Unknown Vessel'}</p>
                                   <p className="text-xs text-gray-500">{payment.vessel?.vesselId || payment.vessel?.imo || ''}</p>
                                 </td>
                                 <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
-                                  ₹{Number(payment.amount || 0).toFixed(2)} {payment.currency || 'INR'}
+                                  ₹{Number(paymentHistoryMode === 'paid' ? payment.amount : payment.totalAmount || 0).toFixed(2)} {payment.currency || 'INR'}
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-700">
                                   {payment.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A'}
                                 </td>
                                 <td className="px-4 py-3 text-xs text-gray-600 break-all">
-                                  {payment.razorpayPaymentId || 'N/A'}
+                                  {paymentHistoryMode === 'paid' ? (payment.razorpayPaymentId || 'N/A') : (payment.invoiceNumber || 'N/A')}
                                 </td>
                               </tr>
                             ))}
@@ -4157,6 +4354,193 @@ export default function ShipManagementDashboard() {
           survey={surveyReportModal.survey}
           onClose={() => setSurveyReportModal({ open: false, survey: null })}
         />
+      )}
+
+      {invoiceModal.open && invoiceModal.owner && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 border-b border-emerald-300 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-extrabold text-white">Professional Invoice</h3>
+                  <p className="text-emerald-100 text-sm mt-1">Create and send invoice to owner dashboard</p>
+                </div>
+                <button
+                  onClick={closeInvoiceModal}
+                  className="text-white hover:text-emerald-200 transition-colors p-2 rounded-lg hover:bg-emerald-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSendInvoice} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <div>
+                  <p className="text-xs text-gray-600 font-semibold uppercase">Ship Company</p>
+                  <p className="text-sm font-bold text-gray-900">{user?.name || 'Ship Management'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 font-semibold uppercase">Owner</p>
+                  <p className="text-sm font-bold text-gray-900">{invoiceModal.owner.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 font-semibold uppercase">Vessel</p>
+                  <p className="text-sm text-gray-900">{selectedShipForDetails?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 font-semibold uppercase">Issue Date & Time</p>
+                  <p className="text-sm text-gray-900">{new Date().toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Select Surveyor</label>
+                  <select
+                    value={invoiceForm.surveyorId}
+                    onChange={(e) => handleInvoiceFieldChange('surveyorId', e.target.value)}
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500"
+                    required
+                  >
+                    <option value="">Select surveyor</option>
+                    {(shipDetailsData?.surveyors || []).map((surveyor) => (
+                      <option key={surveyor.id} value={surveyor.id}>
+                        {surveyor.name} {surveyor.licenseNumber ? `• ${surveyor.licenseNumber}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Due Date</label>
+                  <input
+                    type="date"
+                    value={invoiceForm.dueDate}
+                    onChange={(e) => handleInvoiceFieldChange('dueDate', e.target.value)}
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
+                <div className="grid grid-cols-12 bg-gray-100 px-4 py-3 text-xs font-bold uppercase text-gray-600">
+                  <div className="col-span-5">Description</div>
+                  <div className="col-span-2 text-center">Count</div>
+                  <div className="col-span-2 text-center">Rate (₹)</div>
+                  <div className="col-span-3 text-right">Amount (₹)</div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-3 items-center px-4 py-3 border-t border-gray-100">
+                  <div className="col-span-5 text-sm font-medium text-gray-800">Completed Ship Survey</div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={invoiceForm.completedShipSurveyCount}
+                      onChange={(e) => handleInvoiceFieldChange('completedShipSurveyCount', e.target.value)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={invoiceForm.completedShipSurveyRate}
+                      onChange={(e) => handleInvoiceFieldChange('completedShipSurveyRate', e.target.value)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="col-span-3 text-right text-sm font-semibold text-gray-900">
+                    ₹{((Number(invoiceForm.completedShipSurveyCount) || 0) * (Number(invoiceForm.completedShipSurveyRate) || 0)).toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-3 items-center px-4 py-3 border-t border-gray-100">
+                  <div className="col-span-5 text-sm font-medium text-gray-800">Completed Compliance Survey</div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={invoiceForm.completedComplianceSurveyCount}
+                      onChange={(e) => handleInvoiceFieldChange('completedComplianceSurveyCount', e.target.value)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={invoiceForm.completedComplianceSurveyRate}
+                      onChange={(e) => handleInvoiceFieldChange('completedComplianceSurveyRate', e.target.value)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="col-span-3 text-right text-sm font-semibold text-gray-900">
+                    ₹{((Number(invoiceForm.completedComplianceSurveyCount) || 0) * (Number(invoiceForm.completedComplianceSurveyRate) || 0)).toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-3 items-center px-4 py-3 border-t border-gray-100">
+                  <div className="col-span-5 text-sm font-medium text-gray-800">Ship Management Charge</div>
+                  <div className="col-span-2"></div>
+                  <div className="col-span-2"></div>
+                  <div className="col-span-3">
+                    <input
+                      type="number"
+                      min="0"
+                      value={invoiceForm.managementAmount}
+                      onChange={(e) => handleInvoiceFieldChange('managementAmount', e.target.value)}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right"
+                    />
+                  </div>
+                </div>
+
+                <div className="px-4 py-4 bg-emerald-50 border-t border-emerald-200 flex justify-end">
+                  <div className="text-right">
+                    <p className="text-xs text-gray-600 uppercase font-semibold">Total Amount</p>
+                    <p className="text-2xl font-extrabold text-emerald-700">
+                      ₹{(
+                        ((Number(invoiceForm.completedShipSurveyCount) || 0) * (Number(invoiceForm.completedShipSurveyRate) || 0)) +
+                        ((Number(invoiceForm.completedComplianceSurveyCount) || 0) * (Number(invoiceForm.completedComplianceSurveyRate) || 0)) +
+                        (Number(invoiceForm.managementAmount) || 0)
+                      ).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
+                <textarea
+                  rows={3}
+                  value={invoiceForm.notes}
+                  onChange={(e) => handleInvoiceFieldChange('notes', e.target.value)}
+                  placeholder="Payment terms or additional details"
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeInvoiceModal}
+                  className="px-5 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendingInvoice}
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg font-bold hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingInvoice ? 'Sending...' : 'Send Invoice'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Compliance Report Modal for Ship Finder */}
