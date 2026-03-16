@@ -735,19 +735,55 @@ export default function SurveyorDashboard() {
   };
 
   // Load premium reports from localStorage
-  const loadPremiumReports = () => {
+  const loadPremiumReports = async () => {
     try {
-      const reports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
-      setPremiumReports(reports);
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/custom-reports/premium', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+
+      if (Array.isArray(response.data)) {
+        setPremiumReports(response.data);
+        localStorage.setItem('premiumReports', JSON.stringify(response.data));
+        return;
+      }
+
+      const localReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
+      setPremiumReports(localReports);
     } catch (err) {
-      console.error('Error loading premium reports:', err);
-      setPremiumReports([]);
+      console.error('Error loading premium reports from backend, using local fallback:', err);
+      try {
+        const localReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
+        setPremiumReports(localReports);
+      } catch (localErr) {
+        console.error('Error loading local premium reports:', localErr);
+        setPremiumReports([]);
+      }
     }
   };
 
-  const loadHullInspectionReports = () => {
+  const loadHullInspectionReports = async () => {
     try {
-      const reports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
+      const token = localStorage.getItem('token');
+      let reports = [];
+
+      try {
+        const response = await axios.get('/api/custom-reports/hull-inspection', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        if (Array.isArray(response.data)) {
+          reports = response.data;
+          localStorage.setItem('hullInspectionReports', JSON.stringify(reports));
+        }
+      } catch (apiErr) {
+        console.error('Error loading hull reports from backend, using local fallback:', apiErr);
+      }
+
+      if (!reports.length) {
+        reports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
+      }
+
       const objectIdRegex = /^[a-f\d]{24}$/i;
 
       const normalizedReports = reports.map((report) => {
@@ -786,9 +822,18 @@ export default function SurveyorDashboard() {
     setHullInspectionReports((prevReports) => [report, ...prevReports.filter((item) => item.id !== report.id)]);
   };
 
-  const handleDeleteHullInspectionReport = (reportId) => {
+  const handleDeleteHullInspectionReport = async (reportId) => {
     try {
-      const updatedReports = hullInspectionReports.filter((report) => report.id !== reportId);
+      const reportToDelete = hullInspectionReports.find((report) => report.id === reportId || report._id === reportId);
+
+      if (reportToDelete?._id) {
+        const token = localStorage.getItem('token');
+        await axios.delete(`/api/custom-reports/${reportToDelete._id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+      }
+
+      const updatedReports = hullInspectionReports.filter((report) => report.id !== reportId && report._id !== reportId);
       setHullInspectionReports(updatedReports);
       localStorage.setItem('hullInspectionReports', JSON.stringify(updatedReports));
       setHullDeleteConfirmModal({ open: false, reportId: null, reportName: '' });

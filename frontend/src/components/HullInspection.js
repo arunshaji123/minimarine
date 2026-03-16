@@ -173,19 +173,39 @@ export default function HullInspection({ survey, onClose, onSaveReport }) {
         annotatedImage: compressedAnnotatedImage
       };
 
+      let payloadToSave = compressedPayload;
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.post(
+          '/api/custom-reports',
+          {
+            type: 'hull-inspection',
+            payload: compressedPayload
+          },
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          }
+        );
+
+        payloadToSave = response.data;
+      } catch (apiError) {
+        console.error('Failed to save hull report to backend, using local fallback:', apiError);
+      }
+
       const existingReports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
-      const updatedReports = [compressedPayload, ...existingReports].slice(0, 10);
+      const updatedReports = [payloadToSave, ...existingReports].slice(0, 10);
       localStorage.setItem('hullInspectionReports', JSON.stringify(updatedReports));
 
       const savedReports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
-      const savedReport = savedReports.find((item) => item.id === compressedPayload.id);
+      const savedReport = savedReports.find((item) => item.id === payloadToSave.id || item._id === payloadToSave._id);
 
       if (!savedReport) {
         throw new Error('Saved report could not be verified after storage.');
       }
 
       if (onSaveReport) {
-        onSaveReport(compressedPayload);
+        onSaveReport(payloadToSave);
       }
 
       setSuccessMessage('Hull inspection report saved to Recent Reports successfully.');

@@ -10,6 +10,7 @@ const Shipment = require('./Shipment');
 const SurveyorBooking = require('./SurveyorBooking');
 const CargoManagerBooking = require('./CargoManagerBooking');
 const ServiceRequest = require('./ServiceRequest');
+const CustomReport = require('./CustomReport');
 
 module.exports = {
   User,
@@ -22,5 +23,6 @@ module.exports = {
   Shipment,
   SurveyorBooking,
   CargoManagerBooking,
-  ServiceRequest
+  ServiceRequest,
+  CustomReport
 };

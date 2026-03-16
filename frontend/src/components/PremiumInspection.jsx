@@ -131,7 +131,7 @@ const PremiumInspection = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Validate that at least one status field is selected in each row
@@ -173,10 +173,30 @@ const PremiumInspection = () => {
       ...formData
     };
     
-    // Store in localStorage for Recent Reports section in dashboard
-    const existingReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
-    existingReports.unshift(report);
-    localStorage.setItem('premiumReports', JSON.stringify(existingReports));
+    // Persist to backend for hosted consistency; keep localStorage fallback
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        '/api/custom-reports',
+        {
+          type: 'premium',
+          payload: report
+        },
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        }
+      );
+
+      const persistedReport = response.data;
+      const existingReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
+      existingReports.unshift(persistedReport);
+      localStorage.setItem('premiumReports', JSON.stringify(existingReports));
+    } catch (apiError) {
+      console.error('Failed to save premium report to backend, using local fallback:', apiError);
+      const existingReports = JSON.parse(localStorage.getItem('premiumReports') || '[]');
+      existingReports.unshift(report);
+      localStorage.setItem('premiumReports', JSON.stringify(existingReports));
+    }
     
     console.log('Premium Inspection Data:', formData);
     // TODO: Submit to backend

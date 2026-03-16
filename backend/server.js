@@ -82,6 +82,7 @@ app.use('/api/owner-bookings', require('./routes/owner-bookings'));
 app.use('/api/certificates', require('./routes/certificates'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/hull-inspection', require('./routes/hullInspection'));
+app.use('/api/custom-reports', require('./routes/customReports'));
 
 // Connect to MongoDB
 if (!process.env.MONGODB_URI) {
