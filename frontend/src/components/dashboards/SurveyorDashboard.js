@@ -7,8 +7,10 @@ import SurveyFormModal from '../modals/SurveyFormModal';
 import SurveyDetailsModal from '../modals/SurveyDetailsModal';
 import ComplianceReportModal from '../modals/ComplianceReportModal';
 import PremiumInspectionDetailsModal from '../modals/PremiumInspectionDetailsModal';
+import HullInspectionReportModal from '../modals/HullInspectionReportModal';
 import PredictiveMaintenanceTab from './PredictiveMaintenanceTab';
 import HullInspection from '../HullInspection';
+import { downloadHullInspectionPdf, getHullConditionLabel } from '../../utils/hullInspectionPdf';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
@@ -169,8 +171,10 @@ export default function SurveyorDashboard() {
   const [complianceReports, setComplianceReports] = useState([]);
   // State for premium reports from localStorage
   const [premiumReports, setPremiumReports] = useState([]);
+  const [hullInspectionReports, setHullInspectionReports] = useState([]);
   // Add state for delete confirmation modal
   const [deleteConfirmModal, setDeleteConfirmModal] = useState({ open: false, reportId: null, reportName: '' });
+  const [hullDeleteConfirmModal, setHullDeleteConfirmModal] = useState({ open: false, reportId: null, reportName: '' });
   
   // State for compliance reports filters
   const [complianceReportsFilters, setComplianceReportsFilters] = useState({
@@ -197,6 +201,7 @@ export default function SurveyorDashboard() {
   
   // Premium inspection details modal state
   const [premiumInspectionDetailsModal, setPremiumInspectionDetailsModal] = useState({ open: false, report: null });
+    const [hullInspectionDetailsModal, setHullInspectionDetailsModal] = useState({ open: false, report: null });
   
   // Certificate detail modal state
   const [certificateDetailModal, setCertificateDetailModal] = useState({ open: false, certificate: null });
@@ -463,6 +468,7 @@ export default function SurveyorDashboard() {
     loadAiReports(); // Load AI damage detection reports
     loadComplianceReports(); // Load compliance reports
     loadPremiumReports(); // Load premium reports from localStorage
+    loadHullInspectionReports(); // Load hull inspection reports from localStorage
     loadCertificates(); // Load generated certificates
   }, []);
 
@@ -736,6 +742,87 @@ export default function SurveyorDashboard() {
     } catch (err) {
       console.error('Error loading premium reports:', err);
       setPremiumReports([]);
+    }
+  };
+
+  const loadHullInspectionReports = () => {
+    try {
+      const reports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
+      const objectIdRegex = /^[a-f\d]{24}$/i;
+
+      const normalizedReports = reports.map((report) => {
+        const fallbackReadableId =
+          report?.surveyMeta?.originalSurvey?.vessel?.vesselId ||
+          report?.surveyMeta?.originalSurvey?.vesselId ||
+          report?.surveyMeta?.vesselId ||
+          report?.shipId ||
+          report?.surveyId;
+
+        const looksLikeObjectId = objectIdRegex.test(String(report?.displayId || report?.shipId || ''));
+
+        if (looksLikeObjectId && fallbackReadableId && !objectIdRegex.test(String(fallbackReadableId))) {
+          return {
+            ...report,
+            shipId: fallbackReadableId,
+            displayId: fallbackReadableId
+          };
+        }
+
+        return {
+          ...report,
+          displayId: report?.displayId || fallbackReadableId || report?.surveyId || report?.id
+        };
+      });
+
+      localStorage.setItem('hullInspectionReports', JSON.stringify(normalizedReports));
+      setHullInspectionReports(normalizedReports);
+    } catch (err) {
+      console.error('Error loading hull inspection reports:', err);
+      setHullInspectionReports([]);
+    }
+  };
+
+  const handleHullInspectionReportSaved = (report) => {
+    setHullInspectionReports((prevReports) => [report, ...prevReports.filter((item) => item.id !== report.id)]);
+  };
+
+  const handleDeleteHullInspectionReport = (reportId) => {
+    try {
+      const updatedReports = hullInspectionReports.filter((report) => report.id !== reportId);
+      setHullInspectionReports(updatedReports);
+      localStorage.setItem('hullInspectionReports', JSON.stringify(updatedReports));
+      setHullDeleteConfirmModal({ open: false, reportId: null, reportName: '' });
+      setSuccessMessage('Hull inspection report deleted successfully.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting hull inspection report:', err);
+      setError('Failed to delete hull inspection report.');
+      setHullDeleteConfirmModal({ open: false, reportId: null, reportName: '' });
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  const cancelHullDeleteReport = () => {
+    setHullDeleteConfirmModal({ open: false, reportId: null, reportName: '' });
+  };
+
+  const handleHullReportAction = (action, report) => {
+    if (action === 'view') {
+      setHullInspectionDetailsModal({ open: true, report });
+      return;
+    }
+
+    if (action === 'download') {
+      downloadHullInspectionPdf(report);
+      return;
+    }
+
+    if (action === 'delete') {
+      setHullDeleteConfirmModal({
+        open: true,
+        reportId: report.id,
+        reportName: report.shipName || report.displayId || report.shipId || 'Hull Inspection Report'
+      });
     }
   };
 
@@ -2982,6 +3069,116 @@ export default function SurveyorDashboard() {
                         </button>
                       </td>
                     </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 mt-8 animate-fadeIn">
+          <div className="px-6 py-6 sm:px-8 bg-gradient-to-r from-sky-50 to-cyan-50 border-b-2 border-sky-200">
+            <div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1 flex items-center">
+                <svg className="w-7 h-7 mr-2 text-sky-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0012.586 3H4zm6 1.414L14.586 9H11a1 1 0 01-1-1V4.414z" clipRule="evenodd" />
+                </svg>
+                Ship Hull Inspection Reports
+              </h3>
+              <p className="text-sm text-gray-600">Saved hull inspection reports with AI summary and bounding box output</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gradient-to-r from-sky-50 to-cyan-50">
+                <tr>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Survey ID</th>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Ship Information</th>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Timestamp</th>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Defects</th>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Condition</th>
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {hullInspectionReports.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center">
+                        <svg className="w-16 h-16 text-gray-300 mb-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0012.586 3H4zm6 1.414L14.586 9H11a1 1 0 01-1-1V4.414z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-gray-500 font-medium">No hull inspection reports found</p>
+                        <p className="text-gray-400 text-sm mt-1">Run hull inspection and save the result to see it here</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  hullInspectionReports.map((report) => (
+                    (() => {
+                      const reportDisplayId =
+                        report.displayId ||
+                        report.shipId ||
+                        report.surveyMeta?.originalSurvey?.vessel?.vesselId ||
+                        report.surveyMeta?.originalSurvey?.vesselId ||
+                        report.surveyMeta?.vesselId ||
+                        report.surveyId ||
+                        report.id;
+
+                      return (
+                    <tr key={report.id} className="hover:bg-sky-50 transition-colors duration-200">
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900">{reportDisplayId}</td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-sky-500 to-cyan-600 flex items-center justify-center shadow-md mr-4">
+                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M4 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0012.586 3H4z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-gray-900">{report.shipName || 'Hull Inspection Survey'}</div>
+                            <div className="text-xs text-gray-500 mt-1">{report.filename || 'Hull image'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-600">
+                        {report.timestamp ? new Date(report.timestamp).toLocaleString('en-GB') : 'N/A'}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-gray-900">{report.totalDetections || 0} total</div>
+                        <div className="text-xs text-gray-500 mt-1">Crack: {report.crackCount || 0} • Corrosion: {report.corrosionCount || 0}</div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          getHullConditionLabel(report) === 'Clean'
+                            ? 'bg-green-100 text-green-800 border border-green-300'
+                            : getHullConditionLabel(report).includes('Crack')
+                              ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                              : 'bg-red-100 text-red-800 border border-red-300'
+                        }`}>
+                          {report.overallCondition || getHullConditionLabel(report)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-medium">
+                        <select
+                          defaultValue=""
+                          onChange={(e) => {
+                            const selectedAction = e.target.value;
+                            if (!selectedAction) return;
+                            handleHullReportAction(selectedAction, report);
+                            e.target.value = '';
+                          }}
+                          className="px-3 py-2 border-2 border-sky-300 text-sm font-semibold rounded-lg text-sky-700 bg-sky-50 hover:bg-sky-100 hover:border-sky-400 transition-all duration-200 shadow-sm"
+                        >
+                          <option value="" disabled>Actions</option>
+                          <option value="view">View Details</option>
+                          <option value="download">Download PDF</option>
+                          <option value="delete">Delete Report</option>
+                        </select>
+                      </td>
+                    </tr>
+                      );
+                    })()
                   ))
                 )}
               </tbody>
@@ -5953,6 +6150,7 @@ export default function SurveyorDashboard() {
         {activeSection === 'hull-inspection' && (
           <HullInspection
             survey={hullInspectionSurvey}
+            onSaveReport={handleHullInspectionReportSaved}
             onClose={() => {
               setActiveSection('surveys');
               setHullInspectionSurvey(null);
@@ -6936,6 +7134,12 @@ export default function SurveyorDashboard() {
         onClose={() => setPremiumInspectionDetailsModal({ open: false, report: null })}
         report={premiumInspectionDetailsModal.report}
       />
+
+      <HullInspectionReportModal
+        isOpen={hullInspectionDetailsModal.open}
+        onClose={() => setHullInspectionDetailsModal({ open: false, report: null })}
+        report={hullInspectionDetailsModal.report}
+      />
       
       {/* Certificate PDF Viewer Modal */}
       {certificateDetailModal.open && certificateDetailModal.certificate && (
@@ -6973,6 +7177,36 @@ export default function SurveyorDashboard() {
               </button>
               <button
                 onClick={() => confirmDeleteReport(deleteConfirmModal.reportId)}
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hullDeleteConfirmModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-1/3">
+            <div className="px-6 py-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-700">
+                Are you sure you want to delete the hull inspection report for <strong>{hullDeleteConfirmModal.reportName}</strong>?
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end space-x-3">
+              <button
+                onClick={cancelHullDeleteReport}
+                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteHullInspectionReport(hullDeleteConfirmModal.reportId)}
                 className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
               >
                 Delete

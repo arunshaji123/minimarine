@@ -1,14 +1,78 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
+import { downloadHullInspectionPdf, getHullConditionLabel } from '../utils/hullInspectionPdf';
 
-export default function HullInspection({ survey, onClose }) {
+export default function HullInspection({ survey, onClose, onSaveReport }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [aiServiceOnline, setAiServiceOnline] = useState(null);
   const fileInputRef = useRef();
+
+  const compressImageDataUrl = (dataUrl, maxWidth = 1000, quality = 0.6) => {
+    return new Promise((resolve) => {
+      if (!dataUrl) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(1, maxWidth / image.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      image.onerror = () => resolve(dataUrl);
+      image.src = dataUrl;
+    });
+  };
+
+  const buildReportPayload = () => {
+    if (!results) return null;
+
+    const timestamp = new Date().toISOString();
+    const surveyId = survey?._id || survey?.surveyId || survey?.id || `HULL-${Date.now()}`;
+    const readableVesselId =
+      survey?.vessel?.vesselId ||
+      survey?.vesselId ||
+      survey?.vessel?.id ||
+      survey?.vessel?.identifier ||
+      null;
+    const shipName = survey?.vessel?.name || survey?.vesselName || survey?.shipName || survey?.title || 'Active Survey';
+
+    return {
+      id: `hull-${Date.now()}`,
+      type: 'hull-inspection',
+      reportType: 'Hull Inspection',
+      surveyId,
+      shipId: readableVesselId || surveyId,
+      displayId: readableVesselId || surveyId,
+      shipName,
+      timestamp,
+      filename: results.filename,
+      totalDetections: results.total_detections || 0,
+      crackCount: results.summary?.crack || 0,
+      corrosionCount: results.summary?.corrosion || 0,
+      overallCondition: getHullConditionLabel(results),
+      summary: results.summary || { crack: 0, corrosion: 0, other: 0 },
+      detections: results.detections || [],
+      annotatedImage: results.annotated_image,
+      modelInfo: results.model_info || {},
+      inference: results.inference || {},
+      surveyMeta: {
+        vesselName: shipName,
+        originalSurvey: survey || null
+      }
+    };
+  };
 
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
@@ -17,6 +81,7 @@ export default function HullInspection({ survey, onClose }) {
     setSelectedImage(file);
     setResults(null);
     setError(null);
+    setSuccessMessage(null);
 
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
@@ -32,6 +97,7 @@ export default function HullInspection({ survey, onClose }) {
     setIsDetecting(true);
     setError(null);
     setResults(null);
+    setSuccessMessage(null);
 
     try {
       const token = localStorage.getItem('token');
@@ -80,6 +146,54 @@ export default function HullInspection({ survey, onClose }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
     );
+  };
+
+  const handleDownloadPdf = () => {
+    const reportPayload = buildReportPayload();
+    if (!reportPayload) {
+      setError('Run AI detection before downloading the report.');
+      return;
+    }
+
+    downloadHullInspectionPdf(reportPayload);
+    setSuccessMessage('PDF report download started. Browser download location depends on your browser settings.');
+  };
+
+  const handleSaveToSurveyReports = async () => {
+    const reportPayload = buildReportPayload();
+    if (!reportPayload) {
+      setError('Run AI detection before saving the report.');
+      return;
+    }
+
+    try {
+      const compressedAnnotatedImage = await compressImageDataUrl(reportPayload.annotatedImage, 1000, 0.55);
+      const compressedPayload = {
+        ...reportPayload,
+        annotatedImage: compressedAnnotatedImage
+      };
+
+      const existingReports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
+      const updatedReports = [compressedPayload, ...existingReports].slice(0, 10);
+      localStorage.setItem('hullInspectionReports', JSON.stringify(updatedReports));
+
+      const savedReports = JSON.parse(localStorage.getItem('hullInspectionReports') || '[]');
+      const savedReport = savedReports.find((item) => item.id === compressedPayload.id);
+
+      if (!savedReport) {
+        throw new Error('Saved report could not be verified after storage.');
+      }
+
+      if (onSaveReport) {
+        onSaveReport(compressedPayload);
+      }
+
+      setSuccessMessage('Hull inspection report saved to Recent Reports successfully.');
+      setError(null);
+    } catch (saveError) {
+      console.error('Failed to save hull inspection report:', saveError);
+      setError('Failed to save hull inspection report.');
+    }
   };
 
   return (
@@ -197,6 +311,15 @@ export default function HullInspection({ survey, onClose }) {
           </div>
         )}
 
+        {successMessage && (
+          <div className="bg-green-50 border border-green-300 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-start space-x-2">
+            <svg className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{successMessage}</span>
+          </div>
+        )}
+
         {/* Results */}
         {results && results.success && (
           <div className="space-y-6">
@@ -289,6 +412,20 @@ export default function HullInspection({ survey, onClose }) {
                   <p className="text-xs text-gray-400 mt-2 text-center">
                     Model: {results.model_info?.model || 'YOLOv8'} • {results.filename}
                   </p>
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button
+                      onClick={handleDownloadPdf}
+                      className="inline-flex items-center justify-center px-5 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors shadow-sm w-full sm:w-auto"
+                    >
+                      Download PDF Report
+                    </button>
+                    <button
+                      onClick={handleSaveToSurveyReports}
+                      className="inline-flex items-center justify-center px-5 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors shadow-sm w-full sm:w-auto"
+                    >
+                      Save to Survey Reports
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
