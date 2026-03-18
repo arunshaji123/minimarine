@@ -1,6 +1,5 @@
 import React from 'react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 
 const SurveyDetailsModal = ({ isOpen, onClose, survey }) => {
   if (!isOpen || !survey) return null;
@@ -56,70 +55,185 @@ const SurveyDetailsModal = ({ isOpen, onClose, survey }) => {
     );
   };
 
-  // Generate PDF certificate
+  // Generate professional PDF report
   const generatePDF = async () => {
     try {
-      // Get the content element to convert to PDF
-      const content = document.getElementById('survey-content');
-      
-      if (!content) {
-        console.error('Survey content not found');
-        return;
-      }
-
-      // Temporarily modify styles for better PDF rendering
-      const originalStyle = {
-        overflow: content.style.overflow,
-        maxHeight: content.style.maxHeight,
-        padding: content.style.padding
-      };
-      
-      // Remove restrictions for PDF capture
-      content.style.overflow = 'visible';
-      content.style.maxHeight = 'none';
-      content.style.padding = '20px';
-      
-      // Force reflow
-      void content.offsetHeight;
-
-      // Use html2canvas to capture the content as an image
-      const canvas = await html2canvas(content, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        logging: false,
-        scrollY: -window.scrollY,
-        windowHeight: content.scrollHeight,
-        windowWidth: content.scrollWidth
-      });
-
-      // Restore original styles
-      content.style.overflow = originalStyle.overflow;
-      content.style.maxHeight = originalStyle.maxHeight;
-      content.style.padding = originalStyle.padding;
-
-      // Create PDF using jsPDF
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - margin * 2;
+      const footerY = pageHeight - 12;
+      const lineHeight = 4.8;
+      let y = 22;
+      let currentPage = 1;
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      const textValue = (value) => {
+        if (value === 0) return '0';
+        if (value === null || value === undefined || value === '') return 'N/A';
+        return String(value);
+      };
 
-      // Add new pages if content is taller than one page
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      const addPageFrame = () => {
+        pdf.setDrawColor(209, 213, 219);
+        pdf.setLineWidth(0.4);
+        pdf.line(margin, 14, pageWidth - margin, 14);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text('Marine Survey System • Survey Report', margin, 11);
+
+        pdf.setDrawColor(229, 231, 235);
+        pdf.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, footerY);
+        pdf.text(`Page ${currentPage}`, pageWidth - margin, footerY, { align: 'right' });
+      };
+
+      const ensureSpace = (requiredHeight = 12) => {
+        if (y + requiredHeight > pageHeight - 22) {
+          pdf.addPage();
+          currentPage += 1;
+          addPageFrame();
+          y = 22;
+        }
+      };
+
+      const addSectionHeader = (title) => {
+        ensureSpace(10);
+        pdf.setFillColor(238, 242, 255);
+        pdf.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(30, 58, 138);
+        pdf.text(title, margin + 2, y + 4.8);
+        y += 9.5;
+      };
+
+      const addFieldRow = (label, value) => {
+        const labelX = margin + 1;
+        const valueX = margin + 55;
+        const valueWidth = contentWidth - 56;
+        const lines = pdf.splitTextToSize(textValue(value), valueWidth);
+        const rowHeight = Math.max(lineHeight, lines.length * lineHeight);
+
+        ensureSpace(rowHeight + 1);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(55, 65, 81);
+        pdf.text(`${label}:`, labelX, y + 3.8);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(17, 24, 39);
+        pdf.text(lines, valueX, y + 3.8);
+        y += rowHeight + 1;
+      };
+
+      const addParagraph = (title, text) => {
+        if (!text) return;
+        addSectionHeader(title);
+        const lines = pdf.splitTextToSize(textValue(text), contentWidth - 4);
+        ensureSpace(lines.length * lineHeight + 4);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(31, 41, 55);
+        pdf.text(lines, margin + 2, y + 3.8);
+        y += lines.length * lineHeight + 2;
+      };
+
+      const addComponent = (title, rating, findings) => {
+        if (rating === undefined && !findings) return;
+
+        const findingsText = findings ? `Findings: ${textValue(findings)}` : 'Findings: N/A';
+        const ratingText = rating !== undefined ? `Rating: ${textValue(rating)}/5` : 'Rating: N/A';
+        const lines = [ratingText, ...pdf.splitTextToSize(findingsText, contentWidth - 8)];
+        const boxHeight = 6 + lines.length * lineHeight;
+
+        ensureSpace(boxHeight + 2);
+        pdf.setDrawColor(229, 231, 235);
+        pdf.roundedRect(margin, y, contentWidth, boxHeight, 1.5, 1.5, 'S');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(17, 24, 39);
+        pdf.text(title, margin + 2, y + 4.5);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text(lines, margin + 2, y + 9);
+        y += boxHeight + 2;
+      };
+
+      addPageFrame();
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(30, 58, 138);
+      pdf.text('COMPREHENSIVE SURVEY REPORT', pageWidth / 2, y, { align: 'center' });
+      y += 6;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text(textValue(survey.title || survey.surveyType || 'Survey Report'), pageWidth / 2, y, { align: 'center' });
+      y += 7;
+
+      addSectionHeader('Survey Information');
+      addFieldRow('Vessel', survey.vessel?.name);
+      addFieldRow('Survey Type', survey.surveyType);
+      addFieldRow('Surveyor', survey.surveyor?.name);
+      addFieldRow('Requested By', survey.requestedBy?.name);
+      addFieldRow('Status', survey.status);
+      addFieldRow('Scheduled Date', formatDate(survey.scheduledDate));
+      addFieldRow('Completion Date', formatDate(survey.completionDate));
+      if (survey.location?.port) addFieldRow('Location', survey.location.port);
+
+      addSectionHeader('Description and Quality Ratings');
+      addComponent('Hull Inspection', survey.hullInspection, survey.hullInspectionFindings);
+      addComponent('Deck Superstructure', survey.deckSuperstructure, survey.deckSuperstructureFindings);
+      addComponent('Machinery Engine Room', survey.machineryEngineRoom, survey.machineryEngineRoomFindings);
+      addComponent('Electrical Systems', survey.electricalSystems, survey.electricalSystemsFindings);
+      addComponent('Safety Equipment', survey.safetyEquipment, survey.safetyEquipmentFindings);
+      addComponent('Navigation Equipment', survey.navigationEquipment, survey.navigationEquipmentFindings);
+      addComponent('Pollution Control Systems', survey.pollutionControlSystems, survey.pollutionControlSystemsFindings);
+      addComponent('Certificates Verification', survey.certificatesVerification, survey.certificatesVerificationFindings);
+
+      if (Array.isArray(survey.findings) && survey.findings.length > 0) {
+        addSectionHeader('General Findings');
+        survey.findings.forEach((finding, index) => {
+          const detail = [
+            `${index + 1}. Category: ${textValue(finding.category || 'Other')} | Severity: ${textValue(finding.severity || 'N/A')}`,
+            `Description: ${textValue(finding.description)}`,
+            `Location: ${textValue(finding.location)}`,
+            `Recommendations: ${textValue(finding.recommendations)}`
+          ];
+
+          const allLines = detail.flatMap((item) => pdf.splitTextToSize(item, contentWidth - 6));
+          const boxHeight = 4 + allLines.length * lineHeight;
+          ensureSpace(boxHeight + 2);
+
+          pdf.setDrawColor(229, 231, 235);
+          pdf.roundedRect(margin, y, contentWidth, boxHeight, 1.5, 1.5, 'S');
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(55, 65, 81);
+          pdf.text(allLines, margin + 2, y + 3.8);
+          y += boxHeight + 2;
+        });
+      } else if (survey.findings) {
+        addParagraph('General Findings', survey.findings);
       }
 
-      // Save the PDF with a meaningful filename
-      const vesselName = survey.vessel?.name || 'Unknown_Vessel';
-      const surveyType = survey.surveyType || 'Survey';
+      addParagraph('Recommendations', survey.recommendations);
+      addParagraph('Additional Notes', survey.notes);
+
+      const vesselName = textValue(survey.vessel?.name || 'Unknown_Vessel').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const surveyType = textValue(survey.surveyType || 'Survey').replace(/[^a-zA-Z0-9_-]/g, '_');
       const date = survey.completionDate ? new Date(survey.completionDate).toISOString().split('T')[0] : 'Unknown_Date';
       const filename = `${vesselName}_${surveyType}_Report_${date}.pdf`;
       

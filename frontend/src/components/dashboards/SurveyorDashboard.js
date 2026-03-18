@@ -11,7 +11,7 @@ import HullInspectionReportModal from '../modals/HullInspectionReportModal';
 import PredictiveMaintenanceTab from './PredictiveMaintenanceTab';
 import HullInspection from '../HullInspection';
 import { downloadHullInspectionPdf, getHullConditionLabel } from '../../utils/hullInspectionPdf';
-import { jsPDF } from 'jspdf';
+import { downloadProfessionalPaymentReceipt } from '../../utils/paymentReceiptPdf';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import axios from 'axios';
@@ -725,33 +725,21 @@ export default function SurveyorDashboard() {
 
   const handleDownloadPaymentReceipt = (payment) => {
     const data = getPaymentReceiptDetails(payment);
-    const doc = new jsPDF('p', 'mm', 'a4');
-
-    doc.setFontSize(18);
-    doc.text('Payment Receipt', 15, 18);
-    doc.setFontSize(11);
-    doc.text(`Receipt No: ${data.receiptNumber}`, 15, 26);
-
-    const lines = [
-      `Paid At: ${data.paidAtText}`,
-      `Amount: ${data.amountText}`,
-      `Paid By (Ship Company): ${data.payerName} (${data.payerEmail})`,
-      `Received By (Surveyor): ${data.surveyorName} (${data.surveyorEmail})`,
-      `Vessel: ${data.vesselName}`,
-      `Vessel ID / IMO: ${data.vesselCode}`,
-      `Razorpay Payment ID: ${data.razorpayPaymentId}`,
-      `Razorpay Order ID: ${data.razorpayOrderId}`,
-      `Generated On: ${new Date().toLocaleString()}`
-    ];
-
-    let y = 38;
-    lines.forEach((line) => {
-      const wrapped = doc.splitTextToSize(line, 180);
-      doc.text(wrapped, 15, y);
-      y += wrapped.length * 7;
+    downloadProfessionalPaymentReceipt({
+      receiptNumber: data.receiptNumber,
+      paidAtText: data.paidAtText,
+      amountText: data.amountText,
+      payerName: data.payerName,
+      payerEmail: data.payerEmail,
+      recipientName: data.surveyorName,
+      recipientEmail: data.surveyorEmail,
+      vesselName: data.vesselName,
+      vesselCode: data.vesselCode,
+      paymentMethod: 'Razorpay',
+      paymentId: data.razorpayPaymentId,
+      orderId: data.razorpayOrderId,
+      filePrefix: 'Payment_Receipt'
     });
-
-    doc.save(`Payment_Receipt_${data.receiptNumber}.pdf`);
   };
 
   const handleAcceptBooking = async (bookingId) => {

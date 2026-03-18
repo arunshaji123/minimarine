@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
+import { downloadProfessionalPaymentReceipt } from '../../utils/paymentReceiptPdf';
 
 // Certificate PDF Viewer Component
 const CertificatePdfViewer = ({ certificate, onClose }) => {
@@ -442,6 +443,30 @@ export default function ShipManagementDashboard() {
 
       const ownerOk = !paymentHistorySurveyorFilter || entry?.owner?._id === paymentHistorySurveyorFilter;
       return dateOk && ownerOk;
+    });
+  };
+
+  const handleDownloadPaymentReceipt = (payment) => {
+    const isPaidMode = paymentHistoryMode === 'paid';
+    const amount = Number(isPaidMode ? payment?.amount : payment?.totalAmount || 0).toFixed(2);
+    const receiptNumber = isPaidMode
+      ? (payment?.razorpayPaymentId || payment?._id || 'N/A')
+      : (payment?.invoiceNumber || payment?.razorpayPaymentId || payment?._id || 'N/A');
+
+    downloadProfessionalPaymentReceipt({
+      receiptNumber,
+      paidAtText: payment?.paidAt ? new Date(payment.paidAt).toLocaleString() : 'N/A',
+      amountText: `INR ${amount} ${payment?.currency || 'INR'}`,
+      payerName: isPaidMode ? (user?.name || 'Ship Management') : (payment?.owner?.name || 'Owner'),
+      payerEmail: isPaidMode ? (user?.email || 'N/A') : (payment?.owner?.email || 'N/A'),
+      recipientName: isPaidMode ? (payment?.surveyor?.name || 'Surveyor') : (user?.name || 'Ship Management'),
+      recipientEmail: isPaidMode ? (payment?.surveyor?.email || 'N/A') : (user?.email || 'N/A'),
+      vesselName: payment?.vessel?.name || 'Unknown Vessel',
+      vesselCode: payment?.vessel?.vesselId || payment?.vessel?.imo || 'N/A',
+      paymentMethod: 'Razorpay',
+      paymentId: payment?.razorpayPaymentId || 'N/A',
+      orderId: payment?.razorpayOrderId || payment?.invoiceNumber || 'N/A',
+      filePrefix: 'ShipManagement_Payment_Receipt'
     });
   };
 
@@ -2104,6 +2129,59 @@ export default function ShipManagementDashboard() {
               </div>
             </div>
 
+            {selectedShipForDetails && shipDetailsData && (
+            <>
+            {/* Recent Surveys Section */}
+            {surveys.length > 0 && (
+              <div className="mb-6">
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                  <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b-2 border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg className="w-6 h-6 mr-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6-4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                        </svg>
+                        <h3 className="text-xl font-bold text-gray-900">Recent Surveys</h3>
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {surveys.length} survey(s) on record
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="space-y-4">
+                      {surveys.slice(0, 10).map((survey, index) => (
+                        <div key={survey._id} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border-l-4 border-green-500">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-bold text-white bg-green-600 px-2 py-1 rounded">{index + 1}</span>
+                                <h4 className="text-sm font-bold text-gray-900">{survey.surveyType || 'Survey'}</h4>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                                  survey.status === 'Completed' ? 'bg-green-200 text-green-800' :
+                                  survey.status === 'In Progress' ? 'bg-yellow-200 text-yellow-800' :
+                                  survey.status === 'Scheduled' ? 'bg-blue-200 text-blue-800' :
+                                  'bg-gray-200 text-gray-800'
+                                }`}>
+                                  {survey.status || 'Pending'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-gray-700">
+                                <div><span className="font-semibold">Scheduled:</span> {survey.scheduledDate ? new Date(survey.scheduledDate).toLocaleDateString() : 'N/A'}</div>
+                                <div><span className="font-semibold">Created:</span> {survey.createdAt ? new Date(survey.createdAt).toLocaleDateString() : 'N/A'}</div>
+                                {survey.completedDate && <div><span className="font-semibold">Completed:</span> {new Date(survey.completedDate).toLocaleDateString()}</div>}
+                                {survey.findings && <div className="col-span-2"><span className="font-semibold">Findings:</span> {String(survey.findings).substring(0, 60)}...</div>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Inspection Alerts Section */}
             <div className="mb-6">
               <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
@@ -2376,6 +2454,7 @@ export default function ShipManagementDashboard() {
                               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                 {paymentHistoryMode === 'paid' ? 'Payment ID' : 'Invoice #'}
                               </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Receipt</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
@@ -2401,6 +2480,14 @@ export default function ShipManagementDashboard() {
                                 </td>
                                 <td className="px-4 py-3 text-xs text-gray-600 break-all">
                                   {paymentHistoryMode === 'paid' ? (payment.razorpayPaymentId || 'N/A') : (payment.invoiceNumber || 'N/A')}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <button
+                                    onClick={() => handleDownloadPaymentReceipt(payment)}
+                                    className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                                  >
+                                    Download
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -2433,6 +2520,8 @@ export default function ShipManagementDashboard() {
                   </div>
                 </div>
               </div>
+            )}
+            </>
             )}
           </>
         )}

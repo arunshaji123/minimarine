@@ -1,6 +1,5 @@
 import React from 'react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 
 const ComplianceReportModal = ({ isOpen, onClose, survey }) => {
   if (!isOpen || !survey || !survey.complianceStatus) return null;
@@ -83,40 +82,149 @@ const ComplianceReportModal = ({ isOpen, onClose, survey }) => {
 
   // Function to generate PDF
   const generatePDF = async () => {
-    const contentElement = document.getElementById('compliance-content');
-    
-    if (!contentElement) {
-      console.error('Content element not found');
-      return;
-    }
-    
     try {
-      // Use html2canvas to capture the content
-      const canvas = await html2canvas(contentElement, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Create PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      // Add additional pages if content is longer than one page
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - margin * 2;
+      const footerY = pageHeight - 12;
+      const lineHeight = 4.8;
+      let y = 22;
+      let currentPage = 1;
+
+      const textValue = (value) => {
+        if (value === 0) return '0';
+        if (value === null || value === undefined || value === '') return 'N/A';
+        return String(value);
+      };
+
+      const addPageFrame = () => {
+        pdf.setDrawColor(209, 213, 219);
+        pdf.setLineWidth(0.4);
+        pdf.line(margin, 14, pageWidth - margin, 14);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text('Marine Survey System • Compliance Report', margin, 11);
+
+        pdf.setDrawColor(229, 231, 235);
+        pdf.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, footerY);
+        pdf.text(`Page ${currentPage}`, pageWidth - margin, footerY, { align: 'right' });
+      };
+
+      const ensureSpace = (requiredHeight = 12) => {
+        if (y + requiredHeight > pageHeight - 22) {
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+          currentPage += 1;
+          addPageFrame();
+          y = 22;
+        }
+      };
+
+      const addSectionHeader = (title) => {
+        ensureSpace(10);
+        pdf.setFillColor(238, 242, 255);
+        pdf.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(30, 58, 138);
+        pdf.text(title, margin + 2, y + 4.8);
+        y += 9.5;
+      };
+
+      const addFieldRow = (label, value) => {
+        const labelX = margin + 1;
+        const valueX = margin + 55;
+        const valueWidth = contentWidth - 56;
+        const lines = pdf.splitTextToSize(textValue(value), valueWidth);
+        const rowHeight = Math.max(lineHeight, lines.length * lineHeight);
+
+        ensureSpace(rowHeight + 1);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(55, 65, 81);
+        pdf.text(`${label}:`, labelX, y + 3.8);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(17, 24, 39);
+        pdf.text(lines, valueX, y + 3.8);
+        y += rowHeight + 1;
+      };
+
+      const getStatusSummary = (sectionData = {}) => {
+        const values = Object.values(sectionData);
+        const counts = values.reduce((acc, status) => {
+          const key = getStatusText(status);
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {});
+        return Object.entries(counts).map(([status, count]) => `${status}: ${count}`).join(' | ') || 'N/A';
+      };
+
+      const addComplianceTable = (title, sectionData = {}) => {
+        const entries = Object.entries(sectionData);
+        if (entries.length === 0) return;
+
+        addSectionHeader(title);
+        entries.forEach(([key, value]) => {
+          const label = key
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, str => str.toUpperCase())
+            .replace(/([a-z])([A-Z])/g, '$1 $2');
+
+          addFieldRow(label, getStatusText(value));
+        });
+      };
+
+      addPageFrame();
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(30, 58, 138);
+      pdf.text('COMPLIANCE ASSESSMENT REPORT', pageWidth / 2, y, { align: 'center' });
+      y += 6;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text(textValue(survey.title || survey.surveyType || 'Compliance Report'), pageWidth / 2, y, { align: 'center' });
+      y += 7;
+
+      addSectionHeader('Survey Information');
+      addFieldRow('Vessel', survey.vessel?.name || survey.vesselName);
+      addFieldRow('Survey Type', survey.surveyType);
+      addFieldRow('Surveyor', survey.surveyor?.name);
+      addFieldRow('Client', survey.client);
+      addFieldRow('Scheduled Date', formatDate(survey.scheduledDate));
+      addFieldRow('Submitted Date', formatDate(survey.complianceSubmittedAt));
+
+      addSectionHeader('Compliance Summary');
+      addFieldRow('SOLAS', getStatusSummary(survey.complianceStatus.solas));
+      addFieldRow('MARPOL', getStatusSummary(survey.complianceStatus.marpol));
+      addFieldRow('Load Line', getStatusSummary(survey.complianceStatus.loadLine));
+      addFieldRow('ISM Code', getStatusSummary(survey.complianceStatus.ism));
+      addFieldRow('Classification', getStatusSummary(survey.complianceStatus.classification));
+
+      addComplianceTable('SOLAS Compliance Details', survey.complianceStatus.solas);
+      addComplianceTable('MARPOL Compliance Details', survey.complianceStatus.marpol);
+      addComplianceTable('Load Line Compliance Details', survey.complianceStatus.loadLine);
+      addComplianceTable('ISM Code Compliance Details', survey.complianceStatus.ism);
+      addComplianceTable('Classification Compliance Details', survey.complianceStatus.classification);
+
+      if (survey.overallCompliance) {
+        addSectionHeader('Overall Assessment');
+        addFieldRow('Overall Compliance', getStatusText(survey.overallCompliance));
       }
-      
-      // Save the PDF
-      const vesselName = survey.vessel?.name || survey.vesselName || 'Unknown';
-      const surveyType = survey.surveyType || 'Unknown';
+
+      const vesselName = textValue(survey.vessel?.name || survey.vesselName || 'Unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const surveyType = textValue(survey.surveyType || 'Unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
       pdf.save(`Compliance_Report_${vesselName}_${surveyType}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);

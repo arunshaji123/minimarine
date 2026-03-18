@@ -1,4 +1,5 @@
 import React from 'react';
+import { jsPDF } from 'jspdf';
 
 const PremiumInspectionDetailsModal = ({ isOpen, onClose, report }) => {
   if (!isOpen || !report) return null;
@@ -48,6 +49,222 @@ const PremiumInspectionDetailsModal = ({ isOpen, onClose, report }) => {
       </div>
     </div>
   );
+
+  const sectionConfigs = [
+    {
+      title: 'Swimming Pool & Deck Facilities',
+      icon: '🏊',
+      items: [
+        { label: 'Pool structural condition', value: report.poolStructure },
+        { label: 'Water quality & hygiene', value: report.waterQuality },
+        { label: 'Filtration & circulation system', value: report.filtrationSystem },
+        { label: 'Pool safety signage', value: report.poolSafetySigns },
+        { label: 'Lifeguard equipment availability', value: report.lifeguardEquipment },
+        { label: 'Anti-slip flooring condition', value: report.antiSlipFlooring },
+      ]
+    },
+    {
+      title: 'Helipad Facilities',
+      icon: '🚁',
+      items: [
+        { label: 'Helideck structural condition', value: report.helideckStructure },
+        { label: 'Surface friction & markings', value: report.surfaceFriction },
+        { label: 'Helideck firefighting system', value: report.helideckFirefighting },
+        { label: 'Lighting & night operation readiness', value: report.helideckLighting },
+        { label: 'Wind direction indicator', value: report.windIndicator },
+        { label: 'Emergency access routes', value: report.emergencyAccess },
+      ]
+    },
+    {
+      title: 'Dining & Restaurant Areas',
+      icon: '🍽️',
+      items: [
+        { label: 'Kitchen hygiene standards', value: report.kitchenHygiene },
+        { label: 'Food storage & refrigeration', value: report.foodStorage },
+        { label: 'Galley fire safety systems', value: report.galleyFireSafety },
+        { label: 'Ventilation & exhaust systems', value: report.ventilation },
+        { label: 'Seating comfort & layout', value: report.seatingComfort },
+        { label: 'Waste disposal practices', value: report.wasteDisposal },
+      ]
+    },
+    {
+      title: 'Bar & Lounge Facilities',
+      icon: '🍹',
+      items: [
+        { label: 'Beverage storage condition', value: report.beverageStorage },
+        { label: 'Alcohol handling safety', value: report.alcoholHandling },
+        { label: 'Bar area cleanliness', value: report.barCleanliness },
+        { label: 'Glassware handling safety', value: report.glasswareSafety },
+        { label: 'Fire suppression in bar area', value: report.barFireSuppression },
+        { label: 'Service counter ergonomics', value: report.serviceCounter },
+      ]
+    },
+    {
+      title: 'Guest Cabin Quality',
+      icon: '🛎️',
+      items: [
+        { label: 'Cabin comfort level', value: report.cabinComfort },
+        { label: 'Interior design & finish quality', value: report.interiorDesign },
+        { label: 'Climate control effectiveness', value: report.climateControl },
+        { label: 'Noise & vibration comfort', value: report.noiseVibration },
+        { label: 'Accessibility for elderly / disabled', value: report.accessibility },
+        { label: 'Housekeeping quality', value: report.housekeeping },
+      ]
+    },
+    {
+      title: 'Recreation & Wellness Facilities',
+      icon: '🧘',
+      items: [
+        { label: 'Gym equipment condition', value: report.gymEquipment },
+        { label: 'Spa & wellness facilities', value: report.spaFacilities },
+        { label: 'Entertainment systems', value: report.entertainmentSystems },
+        { label: 'Lounge / cinema readiness', value: report.loungeReadiness },
+        { label: 'Child safety in play areas', value: report.childSafety },
+      ]
+    },
+    {
+      title: 'Passenger Safety & Comfort',
+      icon: '🚨',
+      items: [
+        { label: 'Crowd management readiness', value: report.crowdManagement },
+        { label: 'Emergency evacuation signage', value: report.evacuationSignage },
+        { label: 'Muster station comfort', value: report.musterStation },
+        { label: 'Public area fire safety', value: report.publicFireSafety },
+        { label: 'CCTV & security monitoring', value: report.cctvSecurity },
+        { label: 'Medical facility readiness', value: report.medicalFacility },
+      ]
+    },
+    {
+      title: 'Environmental Standards',
+      icon: '🌍',
+      items: [
+        { label: 'Waste segregation in public areas', value: report.wasteSegregation },
+        { label: 'Noise pollution control', value: report.noisePollution },
+        { label: 'Energy-efficient lighting', value: report.energyLighting },
+        { label: 'Water-saving systems', value: report.waterSaving },
+        { label: 'Eco-friendly practices', value: report.ecoPractices },
+      ]
+    }
+  ];
+
+  const generatePDF = () => {
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - margin * 2;
+      const footerY = pageHeight - 12;
+      const lineHeight = 4.8;
+      let y = 22;
+      let currentPage = 1;
+
+      const textValue = (value) => {
+        if (value === 0) return '0';
+        if (value === null || value === undefined || value === '') return 'N/A';
+        return String(value);
+      };
+
+      const addPageFrame = () => {
+        pdf.setDrawColor(209, 213, 219);
+        pdf.setLineWidth(0.4);
+        pdf.line(margin, 14, pageWidth - margin, 14);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text('Marine Survey System • Premium Inspection Report', margin, 11);
+
+        pdf.setDrawColor(229, 231, 235);
+        pdf.line(margin, pageHeight - 16, pageWidth - margin, pageHeight - 16);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, footerY);
+        pdf.text(`Page ${currentPage}`, pageWidth - margin, footerY, { align: 'right' });
+      };
+
+      const ensureSpace = (requiredHeight = 12) => {
+        if (y + requiredHeight > pageHeight - 22) {
+          pdf.addPage();
+          currentPage += 1;
+          addPageFrame();
+          y = 22;
+        }
+      };
+
+      const addSectionHeader = (title) => {
+        ensureSpace(10);
+        pdf.setFillColor(243, 232, 255);
+        pdf.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(91, 33, 182);
+        pdf.text(title, margin + 2, y + 4.8);
+        y += 9.5;
+      };
+
+      const addFieldRow = (label, value) => {
+        const labelX = margin + 1;
+        const valueX = margin + 80;
+        const valueWidth = contentWidth - 81;
+        const lines = pdf.splitTextToSize(textValue(value), valueWidth);
+        const rowHeight = Math.max(lineHeight, lines.length * lineHeight);
+
+        ensureSpace(rowHeight + 1);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(55, 65, 81);
+        pdf.text(`${label}:`, labelX, y + 3.8);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(17, 24, 39);
+        pdf.text(lines, valueX, y + 3.8);
+        y += rowHeight + 1;
+      };
+
+      addPageFrame();
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(91, 33, 182);
+      pdf.text('PREMIUM INSPECTION REPORT', pageWidth / 2, y, { align: 'center' });
+      y += 6;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text(textValue(report.shipName || 'VIP Ship'), pageWidth / 2, y, { align: 'center' });
+      y += 7;
+
+      addSectionHeader('Report Information');
+      addFieldRow('Survey ID', report.shipId || report.surveyId);
+      addFieldRow('Ship Name', report.shipName || 'VIP Ship');
+      addFieldRow('Timestamp', report.timestamp ? new Date(report.timestamp).toLocaleString() : 'N/A');
+
+      addSectionHeader('Overall VIP Quality Assessment');
+      addFieldRow('VIP Grade', report.vipGrade);
+      addFieldRow('Overall Quality Level', report.vipQualityLevel);
+      addFieldRow('Charter Readiness', report.charterReadiness);
+      addFieldRow('Passenger Readiness', report.passengerReadiness);
+      addFieldRow('Insurance Recommendation', report.insuranceRecommendation);
+
+      sectionConfigs.forEach((section) => {
+        addSectionHeader(section.title);
+        section.items.forEach((item) => {
+          addFieldRow(item.label, item.value);
+        });
+      });
+
+      const safeShipName = textValue(report.shipName || 'VIP_Ship').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeId = textValue(report.shipId || report.surveyId || 'report').replace(/[^a-zA-Z0-9_-]/g, '_');
+      pdf.save(`Premium_Inspection_${safeShipName}_${safeId}.pdf`);
+    } catch (error) {
+      console.error('Error generating premium inspection PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -120,87 +337,17 @@ const PremiumInspectionDetailsModal = ({ isOpen, onClose, report }) => {
 
           {/* Scrollable Content */}
           <div className="max-h-[60vh] overflow-y-auto pr-2">
-            {/* Swimming Pool & Deck Facilities */}
-            {renderSection('Swimming Pool & Deck Facilities', '🏊', [
-              { label: 'Pool structural condition', value: report.poolStructure },
-              { label: 'Water quality & hygiene', value: report.waterQuality },
-              { label: 'Filtration & circulation system', value: report.filtrationSystem },
-              { label: 'Pool safety signage', value: report.poolSafetySigns },
-              { label: 'Lifeguard equipment availability', value: report.lifeguardEquipment },
-              { label: 'Anti-slip flooring condition', value: report.antiSlipFlooring },
-            ])}
-
-            {/* Helipad Facilities */}
-            {renderSection('Helipad Facilities', '🚁', [
-              { label: 'Helideck structural condition', value: report.helideckStructure },
-              { label: 'Surface friction & markings', value: report.surfaceFriction },
-              { label: 'Helideck firefighting system', value: report.helideckFirefighting },
-              { label: 'Lighting & night operation readiness', value: report.helideckLighting },
-              { label: 'Wind direction indicator', value: report.windIndicator },
-              { label: 'Emergency access routes', value: report.emergencyAccess },
-            ])}
-
-            {/* Dining & Restaurant Areas */}
-            {renderSection('Dining & Restaurant Areas', '🍽️', [
-              { label: 'Kitchen hygiene standards', value: report.kitchenHygiene },
-              { label: 'Food storage & refrigeration', value: report.foodStorage },
-              { label: 'Galley fire safety systems', value: report.galleyFireSafety },
-              { label: 'Ventilation & exhaust systems', value: report.ventilation },
-              { label: 'Seating comfort & layout', value: report.seatingComfort },
-              { label: 'Waste disposal practices', value: report.wasteDisposal },
-            ])}
-
-            {/* Bar & Lounge Facilities */}
-            {renderSection('Bar & Lounge Facilities', '🍹', [
-              { label: 'Beverage storage condition', value: report.beverageStorage },
-              { label: 'Alcohol handling safety', value: report.alcoholHandling },
-              { label: 'Bar area cleanliness', value: report.barCleanliness },
-              { label: 'Glassware handling safety', value: report.glasswareSafety },
-              { label: 'Fire suppression in bar area', value: report.barFireSuppression },
-              { label: 'Service counter ergonomics', value: report.serviceCounter },
-            ])}
-
-            {/* Guest Cabin Quality */}
-            {renderSection('Guest Cabin Quality', '🛎️', [
-              { label: 'Cabin comfort level', value: report.cabinComfort },
-              { label: 'Interior design & finish quality', value: report.interiorDesign },
-              { label: 'Climate control effectiveness', value: report.climateControl },
-              { label: 'Noise & vibration comfort', value: report.noiseVibration },
-              { label: 'Accessibility for elderly / disabled', value: report.accessibility },
-              { label: 'Housekeeping quality', value: report.housekeeping },
-            ])}
-
-            {/* Recreation & Wellness Facilities */}
-            {renderSection('Recreation & Wellness Facilities', '🧘', [
-              { label: 'Gym equipment condition', value: report.gymEquipment },
-              { label: 'Spa & wellness facilities', value: report.spaFacilities },
-              { label: 'Entertainment systems', value: report.entertainmentSystems },
-              { label: 'Lounge / cinema readiness', value: report.loungeReadiness },
-              { label: 'Child safety in play areas', value: report.childSafety },
-            ])}
-
-            {/* Passenger Safety & Comfort */}
-            {renderSection('Passenger Safety & Comfort', '🚨', [
-              { label: 'Crowd management readiness', value: report.crowdManagement },
-              { label: 'Emergency evacuation signage', value: report.evacuationSignage },
-              { label: 'Muster station comfort', value: report.musterStation },
-              { label: 'Public area fire safety', value: report.publicFireSafety },
-              { label: 'CCTV & security monitoring', value: report.cctvSecurity },
-              { label: 'Medical facility readiness', value: report.medicalFacility },
-            ])}
-
-            {/* Environmental Standards */}
-            {renderSection('Environmental Standards', '🌍', [
-              { label: 'Waste segregation in public areas', value: report.wasteSegregation },
-              { label: 'Noise pollution control', value: report.noisePollution },
-              { label: 'Energy-efficient lighting', value: report.energyLighting },
-              { label: 'Water-saving systems', value: report.waterSaving },
-              { label: 'Eco-friendly practices', value: report.ecoPractices },
-            ])}
+            {sectionConfigs.map((section) => renderSection(section.title, section.icon, section.items))}
           </div>
 
           {/* Footer */}
           <div className="flex justify-end pt-4 mt-4 border-t border-gray-200">
+            <button
+              onClick={generatePDF}
+              className="mr-3 px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Download PDF
+            </button>
             <button
               onClick={onClose}
               className="px-6 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"

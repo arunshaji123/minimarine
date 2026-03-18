@@ -14,330 +14,253 @@ router.post('/ship-comprehensive', auth, async (req, res) => {
       return res.status(400).json({ msg: 'Vessel information is required' });
     }
 
-    // Create PDF document
+    const safeSurveys = Array.isArray(surveys) ? surveys : [];
+    const safeCertificates = Array.isArray(certificates) ? certificates : [];
+    const safeSurveyors = Array.isArray(surveyors) ? surveyors : [];
+    const safeComplianceReports = Array.isArray(complianceReports) ? complianceReports : [];
+    const safeMaintenancePredictions = Array.isArray(maintenancePredictions) ? maintenancePredictions : [];
+
+    const generatedAt = new Date();
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
 
-    // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Ship_Report_${vessel.name}_${new Date().toISOString().split('T')[0]}.pdf`);
-
-    // Pipe PDF to response
+    res.setHeader('Content-Disposition', `attachment; filename=Ship_Report_${vessel.name}_${generatedAt.toISOString().split('T')[0]}.pdf`);
     doc.pipe(res);
 
-    // Helper function to add a section header
-    const addSectionHeader = (title, yPosition) => {
-      doc.fontSize(16)
-         .fillColor('#4F46E5')
-         .text(title, 50, yPosition, { underline: true })
-         .fillColor('#000000')
-         .fontSize(10);
-      return yPosition + 30;
+    const formatDate = (value) => {
+      if (!value) return 'N/A';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     };
 
-    // Helper function to add a table row
-    const addTableRow = (label, value, yPosition, labelWidth = 150) => {
-      doc.fontSize(9)
-         .fillColor('#4B5563')
-         .text(label + ':', 50, yPosition, { width: labelWidth, continued: false })
-         .fillColor('#000000')
-         .text(value || 'N/A', 50 + labelWidth, yPosition, { width: 350 - labelWidth });
-      return yPosition + 20;
+    const textValue = (value) => {
+      if (value === 0) return '0';
+      if (value === null || value === undefined || value === '') return 'N/A';
+      return String(value);
     };
 
-    // Page 1: Header and Ship Information
-    doc.fontSize(24)
-       .fillColor('#4F46E5')
-       .text('COMPREHENSIVE SHIP REPORT', { align: 'center' })
-       .moveDown(0.5);
+    const left = 50;
+    const right = doc.page.width - 50;
+    const contentWidth = right - left;
+    const bodyBottom = doc.page.height - 55;
+    let yPos = 45;
 
-    doc.fontSize(12)
-       .fillColor('#6B7280')
-       .text(`Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, { align: 'center' })
-       .moveDown(2);
+    const drawPageFrame = () => {
+      doc.strokeColor('#D1D5DB').lineWidth(1).moveTo(left, 40).lineTo(right, 40).stroke();
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#4B5563').text('Marine Survey System • Comprehensive Vessel Report', left, 28, {
+        width: contentWidth,
+        align: 'left'
+      });
 
-    // Ship Information Section
-    let yPos = 150;
-    yPos = addSectionHeader('VESSEL INFORMATION', yPos);
+      doc.strokeColor('#E5E7EB').lineWidth(1).moveTo(left, doc.page.height - 50).lineTo(right, doc.page.height - 50).stroke();
+      doc.font('Helvetica').fontSize(8).fillColor('#6B7280').text(
+        `Generated: ${generatedAt.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+        left,
+        doc.page.height - 44,
+        { width: contentWidth, align: 'center' }
+      );
+    };
+
+    const addPage = () => {
+      doc.addPage();
+      drawPageFrame();
+      yPos = 45;
+    };
+
+    const ensureSpace = (requiredHeight = 14) => {
+      if (yPos + requiredHeight > bodyBottom) {
+        addPage();
+      }
+    };
+
+    const addSectionHeader = (title) => {
+      ensureSpace(14);
+      doc.roundedRect(left, yPos, contentWidth, 16, 2).fill('#EEF2FF');
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#1E3A8A').text(title, left + 5, yPos + 3, {
+        width: contentWidth - 10,
+        align: 'left'
+      });
+      yPos += 17;
+    };
+
+    const addFieldRow = (label, value) => {
+      const labelX = left + 3;
+      const valueX = left + 150;
+      const valueWidth = contentWidth - 153;
+      const rowHeight = Math.max(10, doc.heightOfString(textValue(value), { width: valueWidth, align: 'left' }));
+
+      ensureSpace(rowHeight + 1);
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#374151').text(`${label}:`, labelX, yPos, { width: 145 });
+      doc.font('Helvetica').fontSize(7.5).fillColor('#111827').text(textValue(value), valueX, yPos, { width: valueWidth, align: 'left' });
+      yPos += rowHeight;
+    };
+
+    const addCard = (title, lines = []) => {
+      const cardX = left + 3;
+      const cardY = yPos;
+      const cardWidth = contentWidth - 6;
+      const textWidth = cardWidth - 10;
+      const titleHeight = Math.max(9, doc.heightOfString(title, { width: textWidth }));
+      const detailsHeight = lines.reduce((sum, line) => sum + Math.max(7, doc.heightOfString(line, { width: textWidth })), 0);
+      const cardHeight = titleHeight + detailsHeight + 6;
+
+      ensureSpace(cardHeight + 1);
+
+      doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 1.5).fillAndStroke('#FAFBFC', '#D1D5DB');
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#111827').text(title, cardX + 5, cardY + 3, { width: textWidth });
+
+      let lineY = cardY + 3 + titleHeight;
+      lines.forEach((line) => {
+        doc.font('Helvetica').fontSize(7).fillColor('#4B5563').text(line, cardX + 5, lineY, { width: textWidth });
+        lineY += Math.max(7, doc.heightOfString(line, { width: textWidth }));
+      });
+
+      yPos += cardHeight + 1;
+    };
+
+    drawPageFrame();
+
+    doc.font('Helvetica-Bold').fontSize(14).fillColor('#1E3A8A').text('COMPREHENSIVE VESSEL REPORT', left, yPos, {
+      width: contentWidth,
+      align: 'center'
+    });
+    yPos += 14;
+
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#111827').text(
+      `${textValue(vessel.name)}`,
+      left,
+      yPos,
+      { width: contentWidth, align: 'center' }
+    );
+    yPos += 8;
     
-    yPos = addTableRow('Vessel Name', vessel.name, yPos);
-    yPos = addTableRow('IMO Number', vessel.imo, yPos);
-    yPos = addTableRow('Vessel ID', vessel.vesselId, yPos);
-    yPos = addTableRow('Vessel Type', vessel.vesselType, yPos);
-    yPos = addTableRow('Flag', vessel.flag, yPos);
-    yPos = addTableRow('Year Built', vessel.yearBuilt?.toString(), yPos);
-    yPos = addTableRow('Gross Tonnage', vessel.grossTonnage ? `${vessel.grossTonnage} GT` : 'N/A', yPos);
-    yPos = addTableRow('Net Tonnage', vessel.netTonnage ? `${vessel.netTonnage} NT` : 'N/A', yPos);
-    yPos = addTableRow('Class Society', vessel.classSociety, yPos);
+    doc.font('Helvetica').fontSize(7.5).fillColor('#6B7280').text(
+      `${textValue(vessel.vesselType || 'Vessel')} • IMO: ${textValue(vessel.imo)}`,
+      left,
+      yPos,
+      { width: contentWidth, align: 'center' }
+    );
+    yPos += 8;
+
+    addSectionHeader('Vessel Information');
+    addFieldRow('Vessel Name', vessel.name);
+    addFieldRow('IMO Number', vessel.imo);
+    addFieldRow('Vessel ID', vessel.vesselId);
+    addFieldRow('Vessel Type', vessel.vesselType);
+    addFieldRow('Flag', vessel.flag);
+    addFieldRow('Year Built', vessel.yearBuilt);
+    addFieldRow('Gross Tonnage', vessel.grossTonnage ? `${vessel.grossTonnage} GT` : 'N/A');
+    addFieldRow('Net Tonnage', vessel.netTonnage ? `${vessel.netTonnage} NT` : 'N/A');
+    addFieldRow('Class Society', vessel.classSociety);
 
     if (vessel.dimensions) {
-      yPos = addTableRow('Length', vessel.dimensions.length ? `${vessel.dimensions.length} m` : 'N/A', yPos);
-      yPos = addTableRow('Beam', vessel.dimensions.beam ? `${vessel.dimensions.beam} m` : 'N/A', yPos);
-      yPos = addTableRow('Draft', vessel.dimensions.draft ? `${vessel.dimensions.draft} m` : 'N/A', yPos);
+      addFieldRow('Length', vessel.dimensions.length ? `${vessel.dimensions.length} m` : 'N/A');
+      addFieldRow('Beam', vessel.dimensions.beam ? `${vessel.dimensions.beam} m` : 'N/A');
+      addFieldRow('Draft', vessel.dimensions.draft ? `${vessel.dimensions.draft} m` : 'N/A');
     }
 
-    // Surveys Section
-    if (surveys && surveys.length > 0) {
-      doc.addPage();
-      yPos = 50;
-      yPos = addSectionHeader('SURVEYS SUMMARY', yPos);
+    addSectionHeader('Owner Information');
+    addFieldRow('Owner', vessel.owner ? textValue(vessel.owner.name || vessel.owner) : 'N/A');
+    addFieldRow('Owner Contact', vessel.owner ? textValue(vessel.owner.email || 'N/A') : 'N/A');
+    if (vessel.shipManagement) {
+      addFieldRow('Ship Management', textValue(vessel.shipManagement.name || vessel.shipManagement));
+      addFieldRow('Management Contact', textValue(vessel.shipManagement.email || 'N/A'));
+    }
 
-      const scheduled = surveys.filter(s => s.status === 'Scheduled').length;
-      const inProgress = surveys.filter(s => s.status === 'In Progress').length;
-      const completed = surveys.filter(s => s.status === 'Completed').length;
+    if (safeSurveys.length > 0) {
+      addSectionHeader('Surveys Summary');
+      const scheduled = safeSurveys.filter((survey) => survey.status === 'Scheduled').length;
+      const inProgress = safeSurveys.filter((survey) => survey.status === 'In Progress').length;
+      const completed = safeSurveys.filter((survey) => survey.status === 'Completed').length;
+      addFieldRow('Total Surveys', safeSurveys.length);
+      addFieldRow('Scheduled', scheduled);
+      addFieldRow('In Progress', inProgress);
+      addFieldRow('Completed', completed);
 
-      yPos = addTableRow('Total Surveys', surveys.length.toString(), yPos);
-      yPos = addTableRow('Scheduled', scheduled.toString(), yPos);
-      yPos = addTableRow('In Progress', inProgress.toString(), yPos);
-      yPos = addTableRow('Completed', completed.toString(), yPos);
-      yPos += 10;
-
-      // List recent surveys
-      doc.fontSize(12)
-         .fillColor('#4F46E5')
-         .text('Recent Surveys:', 50, yPos)
-         .fillColor('#000000')
-         .fontSize(9);
-      yPos += 25;
-
-      surveys.slice(0, 10).forEach((survey, index) => {
-        if (yPos > 700) {
-          doc.addPage();
-          yPos = 50;
-        }
-
-        doc.fontSize(10)
-           .fillColor('#1F2937')
-           .text(`${index + 1}. ${survey.surveyType}`, 60, yPos, { continued: false });
-        
-        yPos += 15;
-        doc.fontSize(8)
-           .fillColor('#6B7280')
-           .text(`   Date: ${new Date(survey.scheduledDate).toLocaleDateString()}`, 60, yPos)
-           .text(`Status: ${survey.status}`, 300, yPos);
-        
-        yPos += 20;
+      safeSurveys.slice(0, 5).forEach((survey, index) => {
+        const details = [
+          `${textValue(survey.status || 'Pending')} • ${formatDate(survey.scheduledDate)}`
+        ];
+        addCard(`${index + 1}. ${textValue(survey.surveyType || 'Survey')}`, details);
       });
     }
 
-    // Certificates Section
-    if (certificates && certificates.length > 0) {
-      doc.addPage();
-      yPos = 50;
-      yPos = addSectionHeader('CERTIFICATES', yPos);
-
-      yPos = addTableRow('Total Certificates', certificates.length.toString(), yPos);
-      
-      const validCerts = certificates.filter(cert => {
+    if (safeCertificates.length > 0) {
+      addSectionHeader('Certificates');
+      const validCount = safeCertificates.filter((cert) => {
         const daysRemaining = Math.ceil((new Date(cert.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
         return daysRemaining > 30;
       }).length;
-      
-      const expiringSoon = certificates.filter(cert => {
+      const expiringSoonCount = safeCertificates.filter((cert) => {
         const daysRemaining = Math.ceil((new Date(cert.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
         return daysRemaining <= 30 && daysRemaining >= 0;
       }).length;
-      
-      const expired = certificates.filter(cert => {
+      const expiredCount = safeCertificates.filter((cert) => {
         const daysRemaining = Math.ceil((new Date(cert.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
         return daysRemaining < 0;
       }).length;
+      addFieldRow('Total Certificates', safeCertificates.length);
+      addFieldRow('Valid', validCount);
+      addFieldRow('Expiring Soon (30 days)', expiringSoonCount);
+      addFieldRow('Expired', expiredCount);
 
-      yPos = addTableRow('Valid Certificates', validCerts.toString(), yPos);
-      yPos = addTableRow('Expiring Soon (30 days)', expiringSoon.toString(), yPos);
-      yPos = addTableRow('Expired', expired.toString(), yPos);
-      yPos += 10;
-
-      // List certificates
-      doc.fontSize(12)
-         .fillColor('#4F46E5')
-         .text('Certificate Details:', 50, yPos)
-         .fillColor('#000000')
-         .fontSize(9);
-      yPos += 25;
-
-      certificates.forEach((cert, index) => {
-        if (yPos > 700) {
-          doc.addPage();
-          yPos = 50;
-        }
-
+      safeCertificates.slice(0, 8).forEach((cert, index) => {
         const daysRemaining = Math.ceil((new Date(cert.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
-        const statusText = daysRemaining < 0 ? `Expired ${Math.abs(daysRemaining)} days ago` :
-                          daysRemaining === 0 ? 'Expires today' :
-                          `${daysRemaining} days remaining`;
-
-        doc.fontSize(10)
-           .fillColor('#1F2937')
-           .text(`${index + 1}. ${cert.certificateNumber}`, 60, yPos);
-        
-        yPos += 15;
-        doc.fontSize(8)
-           .fillColor('#6B7280')
-           .text(`   Type: ${cert.surveyType}`, 60, yPos)
-           .text(`Expiry: ${new Date(cert.expiryDate).toLocaleDateString()}`, 250, yPos);
-        
-        yPos += 12;
-        doc.fillColor(daysRemaining < 0 ? '#DC2626' : daysRemaining <= 30 ? '#F59E0B' : '#10B981')
-           .text(`   Status: ${statusText}`, 60, yPos);
-        
-        yPos += 20;
+        const statusText = daysRemaining < 0
+          ? `Expired`
+          : daysRemaining === 0
+            ? 'Expires Today'
+            : `${daysRemaining} days`;
+        const certDetails = [
+          `${textValue(cert.surveyType)} • Expires: ${formatDate(cert.expiryDate)}`,
+          `Cert #: ${textValue(cert.certificateNumber || 'N/A')} • ${statusText}`
+        ];
+        addCard(`${index + 1}. ${textValue(cert.surveyType || 'Certificate')}`, certDetails);
       });
     }
 
-    // Surveyors Section
-    if (surveyors && surveyors.length > 0) {
-      if (yPos > 600) {
-        doc.addPage();
-        yPos = 50;
-      } else {
-        yPos += 20;
-      }
+    if (safeSurveyors.length > 0) {
+      addSectionHeader('Surveyors');
+      addFieldRow('Total Surveyors', safeSurveyors.length);
+      safeSurveyors.slice(0, 5).forEach((surveyor, index) => {
+        const surveyorDetails = [
+          `${textValue(surveyor.email)} • License: ${textValue(surveyor.licenseNumber || 'N/A')}`
+        ];
+        addCard(`${index + 1}. ${textValue(surveyor.name || 'Surveyor')}`, surveyorDetails);
+      });
+    }
+
+    if (safeComplianceReports.length > 0) {
+      addSectionHeader('Compliance Reports');
+      const compliant = safeComplianceReports.filter((report) => report.overallCompliance === 'Compliant').length;
+      const partiallyCompliant = safeComplianceReports.filter((report) => report.overallCompliance === 'Partially Compliant').length;
+      const nonCompliant = safeComplianceReports.filter((report) => report.overallCompliance === 'Non-Compliant').length;
+      addFieldRow('Total Reports', safeComplianceReports.length);
+      addFieldRow('Compliant', compliant);
+      addFieldRow('Partially Compliant', partiallyCompliant);
+      addFieldRow('Non-Compliant', nonCompliant);
       
-      yPos = addSectionHeader('SURVEYORS', yPos);
-
-      yPos = addTableRow('Total Surveyors', surveyors.length.toString(), yPos);
-      yPos += 10;
-
-      doc.fontSize(12)
-         .fillColor('#4F46E5')
-         .text('Surveyor Details:', 50, yPos)
-         .fillColor('#000000')
-         .fontSize(9);
-      yPos += 25;
-
-      surveyors.forEach((surveyor, index) => {
-        if (yPos > 700) {
-          doc.addPage();
-          yPos = 50;
-        }
-
-        doc.fontSize(10)
-           .fillColor('#1F2937')
-           .text(`${index + 1}. ${surveyor.name}`, 60, yPos);
-        
-        yPos += 15;
-        doc.fontSize(8)
-           .fillColor('#6B7280')
-           .text(`   Email: ${surveyor.email}`, 60, yPos);
-        
-        if (surveyor.licenseNumber) {
-          yPos += 12;
-          doc.text(`   License: ${surveyor.licenseNumber}`, 60, yPos);
-        }
-        
-        yPos += 20;
+      safeComplianceReports.slice(0, 6).forEach((report, index) => {
+        const complianceDetails = [
+          `${textValue(report.overallCompliance || 'Pending')} • ${formatDate(report.auditDate || report.complianceSubmittedAt)}`
+        ];
+        if (report.findings) complianceDetails.push(`${textValue(String(report.findings).substring(0, 60))}...`);
+        addCard(`${index + 1}. ${textValue(report.complianceType || 'Audit')}`, complianceDetails);
       });
     }
 
-    // Compliance Reports Section
-    if (complianceReports && complianceReports.length > 0) {
-      doc.addPage();
-      yPos = 50;
-      yPos = addSectionHeader('COMPLIANCE REPORTS', yPos);
-
-      yPos = addTableRow('Total Reports', complianceReports.length.toString(), yPos);
-      
-      const compliant = complianceReports.filter(r => r.overallCompliance === 'Compliant').length;
-      const nonCompliant = complianceReports.filter(r => r.overallCompliance === 'Non-Compliant').length;
-      const partial = complianceReports.filter(r => r.overallCompliance === 'Partially Compliant').length;
-
-      yPos = addTableRow('Compliant', compliant.toString(), yPos);
-      yPos = addTableRow('Partially Compliant', partial.toString(), yPos);
-      yPos = addTableRow('Non-Compliant', nonCompliant.toString(), yPos);
-      yPos += 10;
-
-      // List compliance reports
-      doc.fontSize(12)
-         .fillColor('#4F46E5')
-         .text('Compliance Details:', 50, yPos)
-         .fillColor('#000000')
-         .fontSize(9);
-      yPos += 25;
-
-      complianceReports.forEach((report, index) => {
-        if (yPos > 700) {
-          doc.addPage();
-          yPos = 50;
-        }
-
-        doc.fontSize(10)
-           .fillColor('#1F2937')
-           .text(`${index + 1}. ${report.surveyType}`, 60, yPos);
-        
-        yPos += 15;
-        doc.fontSize(8)
-           .fillColor('#6B7280')
-           .text(`   Date: ${report.complianceSubmittedAt ? new Date(report.complianceSubmittedAt).toLocaleDateString() : 'N/A'}`, 60, yPos);
-        
-        yPos += 12;
-        doc.fillColor(
-          report.overallCompliance === 'Compliant' ? '#10B981' :
-          report.overallCompliance === 'Non-Compliant' ? '#DC2626' :
-          '#F59E0B'
-        ).text(`   Status: ${report.overallCompliance || 'Pending'}`, 60, yPos);
-        
-        yPos += 20;
+    if (safeMaintenancePredictions.length > 0) {
+      addSectionHeader('Predictive Maintenance');
+      safeMaintenancePredictions.slice(0, 5).forEach((prediction, index) => {
+        const maintenanceDetails = [
+          `${textValue(prediction.risk || 'Unknown')} • ${textValue(prediction.prediction)}`
+        ];
+        if (prediction.recommendation) maintenanceDetails.push(`${textValue(prediction.recommendation)}`);
+        addCard(`${index + 1}. ${textValue(prediction.component || 'Component')}`, maintenanceDetails);
       });
     }
 
-    // Predictive Maintenance Section
-    if (maintenancePredictions && maintenancePredictions.length > 0) {
-      doc.addPage();
-      yPos = 50;
-      yPos = addSectionHeader('PREDICTIVE MAINTENANCE INSIGHTS', yPos);
-
-      maintenancePredictions.forEach((prediction, index) => {
-        if (yPos > 650) {
-          doc.addPage();
-          yPos = 50;
-        }
-
-        doc.fontSize(11)
-           .fillColor('#1F2937')
-           .text(`${index + 1}. ${prediction.component}`, 60, yPos);
-        
-        yPos += 18;
-        doc.fontSize(9)
-           .fillColor('#6B7280')
-           .text(`Prediction: ${prediction.prediction}`, 70, yPos, { width: 450 });
-        
-        yPos += doc.heightOfString(`Prediction: ${prediction.prediction}`, { width: 450 }) + 5;
-        
-        doc.fillColor(
-          prediction.risk === 'High' ? '#DC2626' :
-          prediction.risk === 'Medium' ? '#F59E0B' :
-          '#10B981'
-        ).text(`Risk Level: ${prediction.risk}`, 70, yPos);
-        
-        yPos += 15;
-        
-        if (prediction.recommendation) {
-          doc.fillColor('#6B7280')
-             .text(`Recommendation: ${prediction.recommendation}`, 70, yPos, { width: 450 });
-          yPos += doc.heightOfString(`Recommendation: ${prediction.recommendation}`, { width: 450 }) + 10;
-        }
-        
-        yPos += 15;
-      });
-    }
-
-    // Footer on last page
-    doc.fontSize(8)
-       .fillColor('#9CA3AF')
-       .text(
-         `Report generated by Marine Survey System on ${new Date().toLocaleDateString('en-US', { 
-           year: 'numeric', 
-           month: 'long', 
-           day: 'numeric',
-           hour: '2-digit',
-           minute: '2-digit'
-         })}`,
-         50,
-         doc.page.height - 50,
-         { align: 'center' }
-       );
-
-    // Finalize PDF
     doc.end();
 
   } catch (err) {

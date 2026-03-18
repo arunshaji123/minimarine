@@ -14,6 +14,7 @@ import UserProfileModal from '../UserProfileModal.jsx';
 import ServiceRequestModal from '../modals/ServiceRequestModal';
 import SurveyDetailsModal from '../modals/SurveyDetailsModal';
 import ComplianceReportModal from '../modals/ComplianceReportModal';
+import { downloadProfessionalPaymentReceipt } from '../../utils/paymentReceiptPdf';
 import VesselTab from './VesselTab';
 import PredictiveMaintenanceTab from './PredictiveMaintenanceTab';
 
@@ -431,84 +432,24 @@ export default function OwnerDashboard() {
     document.body.appendChild(script);
   }, []);
 
-  // Download invoice as a print-friendly PDF via browser print dialog
+  // Download invoice payment receipt using professional PDF template
   const handleDownloadInvoice = (invoice) => {
-    const fmt = (n) => Number(n || 0).toLocaleString('en-IN');
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-    const rows = [];
-    let idx = 1;
-    if ((Number(invoice.completedShipSurveyCount) > 0) || (Number(invoice.completedShipSurveyRate) > 0)) {
-      rows.push(`<tr><td>${idx++}</td><td>Completed Ship Survey<br/><small>Rate: ₹${fmt(invoice.completedShipSurveyRate)} per survey</small></td><td style="text-align:center">${invoice.completedShipSurveyCount ?? 0}</td><td style="text-align:right">₹${fmt(invoice.completedShipSurveyAmount || (Number(invoice.completedShipSurveyCount) * Number(invoice.completedShipSurveyRate)))}</td></tr>`);
-    }
-    if ((Number(invoice.completedComplianceSurveyCount) > 0) || (Number(invoice.completedComplianceSurveyRate) > 0)) {
-      rows.push(`<tr><td>${idx++}</td><td>Completed Compliance Survey<br/><small>Rate: ₹${fmt(invoice.completedComplianceSurveyRate)} per survey</small></td><td style="text-align:center">${invoice.completedComplianceSurveyCount ?? 0}</td><td style="text-align:right">₹${fmt(invoice.completedComplianceSurveyAmount || (Number(invoice.completedComplianceSurveyCount) * Number(invoice.completedComplianceSurveyRate)))}</td></tr>`);
-    }
-    if (Number(invoice.managementAmount) > 0) {
-      rows.push(`<tr><td>${idx++}</td><td>Ship Management Charge<br/><small>Vessel: ${invoice.vessel?.name || '-'}</small></td><td style="text-align:center">1</td><td style="text-align:right">₹${fmt(invoice.managementAmount)}</td></tr>`);
-    }
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice ${invoice.invoiceNumber || ''}</title>
-      <style>
-        body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#111;}
-        .center{text-align:center;}
-        .badge{width:72px;height:72px;border-radius:50%;background:#10b981;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:2rem;font-weight:900;margin-bottom:8px;}
-        h1{font-size:3rem;font-weight:900;color:#10b981;letter-spacing:6px;margin:8px 0 0;}
-        .divider{height:3px;background:#10b981;margin:8px 0 16px;}
-        .bill-label{color:#10b981;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;}
-        .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:20px 0;}
-        .meta-cell{padding:12px 14px;background:#f9fafb;border-right:1px solid #e5e7eb;}
-        .meta-cell:last-child{border-right:none;}
-        .meta-label{font-size:0.7rem;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .meta-val{font-size:0.88rem;font-weight:700;color:#111;margin-top:3px;}
-        table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-        th{border-bottom:2px solid #e5e7eb;padding:8px 4px;font-size:0.75rem;color:#10b981;text-transform:uppercase;font-weight:700;}
-        td{padding:14px 4px;font-size:0.875rem;border-bottom:1px solid #f3f4f6;vertical-align:top;}
-        td small{color:#9ca3af;font-size:0.75rem;display:block;margin-top:2px;}
-        .totals{text-align:right;border-top:2px solid #e5e7eb;padding-top:12px;}
-        .total-row{display:flex;justify-content:flex-end;gap:0;}
-        .total-label{width:140px;font-size:0.875rem;color:#6b7280;}
-        .total-val{width:120px;text-align:right;font-size:0.875rem;font-weight:600;color:#111;}
-        .grand-label{font-size:1rem;font-weight:700;color:#111;}
-        .grand-val{font-size:1.2rem;font-weight:900;color:#10b981;}
-        .notes{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-top:16px;font-size:0.875rem;}
-        .notes-label{font-size:0.7rem;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:4px;}
-        .surveyor-line{font-size:0.75rem;color:#9ca3af;margin-top:14px;}
-        @media print{body{padding:16px;}}
-      </style></head><body>
-      <div class="center">
-        <div class="badge">${(invoice.shipCompany?.name || 'S').charAt(0).toUpperCase()}</div><br/>
-        <strong style="font-size:1.1rem">${invoice.shipCompany?.name || 'Ship Management Company'}</strong><br/>
-        <span style="font-size:0.9rem;color:#6b7280">${invoice.shipCompany?.email || ''}</span>
-        <h1>INVOICE</h1>
-        <div class="divider"></div>
-        <p class="bill-label">Bill To</p>
-        <strong>${invoice.owner?.name || 'Owner'}</strong><br/>
-        <span style="font-size:0.9rem;color:#6b7280">${invoice.owner?.email || ''}</span>
-      </div>
-      <div class="meta-grid">
-        <div class="meta-cell"><div class="meta-label">Invoice #</div><div class="meta-val">${invoice.invoiceNumber || '-'}</div></div>
-        <div class="meta-cell"><div class="meta-label">Invoice Date</div><div class="meta-val">${fmtDate(invoice.issueDate)}</div></div>
-        <div class="meta-cell"><div class="meta-label">Vessel</div><div class="meta-val">${invoice.vessel?.name || '-'}</div></div>
-        <div class="meta-cell"><div class="meta-label">Due Date</div><div class="meta-val">${fmtDate(invoice.dueDate)}</div></div>
-      </div>
-      <table>
-        <thead><tr><th style="width:28px">#</th><th style="text-align:left">Item &amp; Description</th><th style="text-align:center;width:60px">Qty</th><th style="text-align:right;width:120px">Amount</th></tr></thead>
-        <tbody>${rows.join('')}</tbody>
-      </table>
-      <div class="totals">
-        <div class="total-row"><span class="total-label">Subtotal</span><span class="total-val">₹${fmt(invoice.subtotalAmount || invoice.totalAmount)}</span></div>
-        ${Number(invoice.taxAmount) > 0 ? `<div class="total-row"><span class="total-label">Tax</span><span class="total-val">₹${fmt(invoice.taxAmount)}</span></div>` : ''}
-        <div class="total-row" style="border-top:1px solid #e5e7eb;margin-top:6px;padding-top:6px"><span class="total-label grand-label">Total</span><span class="total-val grand-val">₹${fmt(invoice.totalAmount)}</span></div>
-      </div>
-      ${invoice.notes ? `<div class="notes"><div class="notes-label">Notes</div>${invoice.notes}</div>` : ''}
-      <p class="surveyor-line">Surveyor: <strong>${invoice.surveyor?.name || '-'}</strong>${invoice.surveyor?.email ? ` · ${invoice.surveyor.email}` : ''}</p>
-    </body></html>`;
-    const win = window.open('', '_blank', 'width=800,height=900');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      setTimeout(() => { win.print(); }, 600);
-    }
+    const receiptNumber = invoice?.razorpayPaymentId || invoice?.invoiceNumber || invoice?._id || 'N/A';
+    downloadProfessionalPaymentReceipt({
+      receiptNumber,
+      paidAtText: invoice?.paidAt ? new Date(invoice.paidAt).toLocaleString() : 'N/A',
+      amountText: `INR ${Number(invoice?.totalAmount || 0).toFixed(2)} ${invoice?.currency || 'INR'}`,
+      payerName: invoice?.owner?.name || user?.name || 'Owner',
+      payerEmail: invoice?.owner?.email || user?.email || 'N/A',
+      recipientName: invoice?.shipCompany?.name || 'Ship Management Company',
+      recipientEmail: invoice?.shipCompany?.email || 'N/A',
+      vesselName: invoice?.vessel?.name || 'Unknown Vessel',
+      vesselCode: invoice?.vessel?.vesselId || invoice?.vessel?.imo || 'N/A',
+      paymentMethod: 'Razorpay',
+      paymentId: invoice?.razorpayPaymentId || invoice?.paymentId || 'N/A',
+      orderId: invoice?.razorpayOrderId || invoice?.invoiceNumber || 'N/A',
+      filePrefix: 'Owner_Payment_Receipt'
+    });
   };
 
   // Pay invoice via Razorpay test checkout
@@ -1841,6 +1782,7 @@ export default function OwnerDashboard() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid At</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Surveyor</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Receipt</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -1863,6 +1805,14 @@ export default function OwnerDashboard() {
                               <td className="px-4 py-3">
                                 <p className="text-sm font-semibold text-gray-900">{invoice.surveyor?.name || 'Unknown Surveyor'}</p>
                                 <p className="text-xs text-gray-500">{invoice.surveyor?.email || ''}</p>
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <button
+                                  onClick={() => handleDownloadInvoice(invoice)}
+                                  className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                                >
+                                  Download
+                                </button>
                               </td>
                             </tr>
                           ))}
